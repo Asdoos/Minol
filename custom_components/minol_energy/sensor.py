@@ -144,7 +144,7 @@ async def async_setup_entry(
     """Set up Minol sensors from a config entry."""
     coordinator: MinolDataCoordinator = entry.runtime_data
 
-    entities: list[MinolSensor] = []
+    entities: list[SensorEntity] = []
 
     # Tenant info sensor
     entities.append(MinolTenantInfoSensor(coordinator, entry))
@@ -179,6 +179,27 @@ async def async_setup_entry(
                     unit=sensor_unit,
                     icon_str=sensor_icon,
                     device_class=device_class if not is_per_m2 and sdef.suffix != "building_share" else None,
+                )
+            )
+
+    # Per-room / per-meter sensors
+    rooms = coordinator.data.get("rooms", {})
+    for cons_type, meters in rooms.items():
+        type_text = _TYPE_TEXT.get(cons_type, cons_type.title())
+        icon, unit, device_class = _TYPE_META.get(
+            cons_type, ("mdi:gauge", None, None)
+        )
+        for meter in meters:
+            entities.append(
+                MinolRoomSensor(
+                    coordinator=coordinator,
+                    entry=entry,
+                    cons_type=cons_type,
+                    meter=meter,
+                    type_text=type_text,
+                    unit=unit,
+                    icon_str=icon,
+                    device_class=device_class,
                 )
             )
 
@@ -280,4 +301,73 @@ class MinolTenantInfoSensor(CoordinatorEntity[MinolDataCoordinator], SensorEntit
             "position": info.get("lageText"),
             "move_in_date": info.get("einzugMieter"),
             "user_number": info.get("userNumber"),
+        }
+
+
+class MinolRoomSensor(CoordinatorEntity[MinolDataCoordinator], SensorEntity):
+    """A sensor for a single meter in a room (RAUM view)."""
+
+    _attr_has_entity_name = True
+    _attr_state_class = SensorStateClass.TOTAL
+
+    def __init__(
+        self,
+        coordinator: MinolDataCoordinator,
+        entry: MinolConfigEntry,
+        cons_type: str,
+        meter: dict[str, Any],
+        type_text: str,
+        unit: str | None,
+        icon_str: str,
+        device_class: SensorDeviceClass | None,
+    ) -> None:
+        super().__init__(coordinator)
+        self._cons_type = cons_type
+        self._ger_nr = meter.get("gerNr", "")
+        self._internal_key = meter.get("internalKey", "")
+
+        room_name = meter.get("raum", "Unknown")
+        slug = f"{cons_type}_{self._ger_nr}".lower()
+        self._attr_unique_id = f"{entry.entry_id}_{slug}"
+        self._attr_name = f"{type_text} {room_name} ({self._ger_nr[-4:]})"
+        self._attr_native_unit_of_measurement = unit
+        self._attr_icon = icon_str
+        self._attr_device_class = device_class
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry.entry_id)},
+            "name": "Minol eMonitoring",
+            "manufacturer": "Minol-ZENNER",
+            "model": "eMonitoring",
+            "entry_type": "service",
+        }
+
+    def _find_meter(self) -> dict[str, Any] | None:
+        """Find this meter in the current coordinator data."""
+        meters = self.coordinator.data.get("rooms", {}).get(self._cons_type, [])
+        for m in meters:
+            if m.get("gerNr") == self._ger_nr:
+                return m
+        return None
+
+    @property
+    def native_value(self) -> float | None:
+        meter = self._find_meter()
+        if meter is None:
+            return None
+        val = meter.get("consumptionBew")
+        return float(val) if val is not None else None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        meter = self._find_meter()
+        if meter is None:
+            return {}
+        return {
+            "room": meter.get("raum"),
+            "meter_serial": meter.get("gerNr"),
+            "reading": meter.get("ablesung"),
+            "initial_reading": meter.get("anfangsstand"),
+            "raw_consumption": meter.get("consumption"),
+            "weighting_factor": meter.get("bewertung"),
+            "unit": meter.get("unit"),
         }

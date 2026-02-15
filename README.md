@@ -41,6 +41,22 @@ created:
 | Cold Water Building Share % | 15 % | Your share |
 | Tenant Info | Fabrikstr. 33, ... | Address with attributes (name, floor, move-in) |
 
+### Per-room / per-meter sensors
+
+For each individual meter registered to your unit, a sensor is created with the
+weighted consumption value. The sensor name includes the room and last 4 digits
+of the meter serial number.
+
+| Sensor example | Example value | Description |
+|---|---|---|
+| Heating Living room (6910) | 973.83 kWh | Weighted heating consumption for one HKV |
+| Heating Bedroom (6448) | 456.12 kWh | Weighted heating for bedroom meter |
+| Hot Water Kitchen (3331) | 12.45 kWh | Hot water meter in kitchen |
+| Cold Water Bathroom (3364) | 5.20 m³ | Cold water meter in bathroom |
+
+Each room sensor carries these extra attributes: `room`, `meter_serial`,
+`reading`, `initial_reading`, `raw_consumption`, `weighting_factor`, `unit`.
+
 The exact set of sensors depends on which meter types your property has.
 
 ---
@@ -55,9 +71,12 @@ Home Assistant                      Minol Portal (SAP NetWeaver)
  │              │ GET getUserTenants│ → [{userNumber, addr...}] │
  │              │ POST getLayerInfo │ → {views, periods, scales} │
  │              │ POST readData     │ → {dashboard: [...]}      │
- └──────┬───────┘ (dashboard)       └───────────────────────────┘
+ │              │ (dashboard)       │                           │
+ │              │ POST readData     │ → {table: [...]}          │
+ └──────┬───────┘ (RAUM views)      └───────────────────────────┘
         │
-   19 sensor entities
+   19+ sensor entities
+   (dashboard + per-meter)
 ```
 
 ---

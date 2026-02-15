@@ -229,10 +229,31 @@ class MinolApiClient:
         }
         return await self._post_json(f"{EMDATA_REST}/readData", selection)
 
+    async def get_room_data(
+        self,
+        user_num: str | None,
+        view_key: str,
+        cons_type: str,
+    ) -> dict[str, Any] | None:
+        """Fetch per-room / per-meter data for a RAUM view."""
+        selection = {
+            "userNum": user_num,
+            "layer": "NE",
+            "scale": "CALYEAR",
+            "chartRefUnit": "ABS",
+            "refObject": "NOREF",
+            "consType": cons_type,
+            "dashBoardKey": "PE",
+            "valuesInKWH": True,
+            "dlgKey": view_key,
+        }
+        return await self._post_json(f"{EMDATA_REST}/readData", selection)
+
     async def get_all_data(self) -> dict[str, Any]:
         """Collect all data needed by the integration sensors.
 
-        Returns a dict with ``tenants``, ``layer_info``, and ``dashboard``.
+        Returns a dict with ``tenants``, ``layer_info``, ``dashboard``,
+        and ``rooms`` (per-meter / per-room data).
         """
         tenants = await self.get_user_tenants()
         user_num = tenants[0]["userNumber"] if tenants else None
@@ -241,10 +262,28 @@ class MinolApiClient:
         layer_info = await self.get_layer_info(user_num)
         dashboard = await self.get_dashboard(user_num)
 
+        # Fetch per-room data for every RAUM view available.
+        rooms: dict[str, list[dict[str, Any]]] = {}
+        raum_views = {
+            "100EHRAUM": "HEIZUNG",
+            "200RAUM": "WARMWASSER",
+            "300RAUM": "KALTWASSER",
+        }
+        available_keys = {
+            v["key"] for v in (layer_info or {}).get("views", [])
+        }
+        for view_key, cons_type in raum_views.items():
+            if view_key not in available_keys:
+                continue
+            result = await self.get_room_data(user_num, view_key, cons_type)
+            if result and isinstance(result.get("table"), list):
+                rooms[cons_type] = result["table"]
+
         return {
             "tenants": tenants,
             "tenant_info": tenant_info,
             "user_num": user_num,
             "layer_info": layer_info or {},
             "dashboard": dashboard or {},
+            "rooms": rooms,
         }
