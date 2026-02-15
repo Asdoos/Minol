@@ -14,6 +14,18 @@ front-end uses.
 
 ---
 
+## Features
+
+- **Energy Dashboard compatible** — consumption sensors use `TOTAL_INCREASING` and can be added directly to the HA Energy Dashboard
+- **Per-room / per-meter sensors** — individual meters for heating, hot water and cold water
+- **Cost estimation** — configure energy prices to see estimated costs
+- **Configurable update interval** — adjust polling frequency (15 min to 24 h)
+- **Reauthentication flow** — HA automatically prompts for new credentials when the session expires
+- **Diagnostics** — export anonymized data for debugging via HA diagnostics
+- **Multilingual** — English and German translations
+
+---
+
 ## Sensors
 
 For each consumption type available on your account, the following sensors are
@@ -59,6 +71,33 @@ Each room sensor carries these extra attributes: `room`, `meter_serial`,
 
 The exact set of sensors depends on which meter types your property has.
 
+### Cost sensors
+
+When energy prices are configured in the integration options, cost sensors are
+created automatically:
+
+| Sensor example | Example value | Description |
+|---|---|---|
+| Heating Cost | 117.54 € | Current year heating × configured price |
+| Hot Water Cost | 34.54 € | Current year hot water × configured price |
+| Cold Water Cost | 96.62 € | Current year cold water × configured price |
+
+Cost sensors include a `price_per_unit` attribute showing the configured rate.
+
+---
+
+## Energy Dashboard
+
+The following sensors are compatible with the HA Energy Dashboard
+(**Settings > Dashboards > Energy**):
+
+- **Heating / Hot Water Current Year** — add under gas or individual consumption
+- **Cold Water Current Year** — add under water consumption
+- **Per-room / per-meter sensors** — for detailed per-meter tracking
+
+These sensors use `SensorStateClass.TOTAL_INCREASING` and are automatically
+offered when configuring the Energy Dashboard.
+
 ---
 
 ## How it works
@@ -76,7 +115,7 @@ Home Assistant                      Minol Portal (SAP NetWeaver)
  └──────┬───────┘ (RAUM views)      └───────────────────────────┘
         │
    19+ sensor entities
-   (dashboard + per-meter)
+   (dashboard + per-meter + cost)
 ```
 
 ---
@@ -103,6 +142,19 @@ Copy `custom_components/minol_energy/` into your HA config directory and restart
 2. Enter your e-mail and password (same as [webservices.minol.com](https://webservices.minol.com/)).
 3. Done. Sensors appear automatically.
 
+### Options
+
+After setup, click **Configure** on the integration to adjust:
+
+| Option | Default | Description |
+|---|---|---|
+| Update interval | 60 min | How often to poll the Minol portal (15–1440 min) |
+| Heating price | 0.00 €/kWh | Price per kWh for heating cost estimation |
+| Hot water price | 0.00 €/kWh | Price per kWh for hot water cost estimation |
+| Cold water price | 0.00 €/m³ | Price per m³ for cold water cost estimation |
+
+Setting a price to `0` disables the corresponding cost sensor.
+
 ---
 
 ## Troubleshooting
@@ -112,6 +164,11 @@ Copy `custom_components/minol_energy/` into your HA config directory and restart
 | **"Cannot connect"** | Verify you can log in at [webservices.minol.com](https://webservices.minol.com/) in Chrome. |
 | **"Invalid username or password"** | The integration checks for the `MYSAPSSO2` cookie. If SAP doesn't issue it, credentials are wrong. |
 | **No sensors / all unknown** | Your portal account may not have eMonitoring enabled. Contact Minol. |
+| **Session expired** | The integration will automatically prompt you to re-enter your password. |
+
+### Diagnostics
+
+Go to **Settings > Devices & Services > Minol Energy > three-dot menu > Download diagnostics** to export anonymized debug data. Sensitive fields (name, email, address) are redacted automatically.
 
 ### Debug logging
 
