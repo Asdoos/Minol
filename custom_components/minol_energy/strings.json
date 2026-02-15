@@ -8,6 +8,13 @@
           "username": "Username (e-mail)",
           "password": "Password"
         }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate Minol eMonitoring",
+        "description": "Your session has expired. Please enter your password again.",
+        "data": {
+          "password": "Password"
+        }
       }
     },
     "error": {
@@ -16,7 +23,21 @@
       "unknown": "An unexpected error occurred."
     },
     "abort": {
-      "already_configured": "This account is already configured."
+      "already_configured": "This account is already configured.",
+      "reauth_successful": "Re-authentication successful."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Minol Energy Options",
+        "data": {
+          "scan_interval": "Update interval (minutes)",
+          "heating_price": "Heating price (\u20ac/kWh)",
+          "hot_water_price": "Hot water price (\u20ac/kWh)",
+          "cold_water_price": "Cold water price (\u20ac/m\u00b3)"
+        }
+      }
     }
   }
 }

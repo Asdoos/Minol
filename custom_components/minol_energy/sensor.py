@@ -24,7 +24,12 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import MinolConfigEntry
-from .const import DOMAIN
+from .const import (
+    CONF_COLD_WATER_PRICE,
+    CONF_HEATING_PRICE,
+    CONF_HOT_WATER_PRICE,
+    DOMAIN,
+)
 from .coordinator import MinolDataCoordinator
 
 _LOGGER = logging.getLogger(__name__)
@@ -134,6 +139,13 @@ _TYPE_TEXT = {
     "KALTWASSER": "Cold Water",
 }
 
+# Map keyFigure to the options key holding the price per unit.
+_PRICE_CONF_KEY: dict[str, str] = {
+    "HEIZUNG": CONF_HEATING_PRICE,
+    "WARMWASSER": CONF_HOT_WATER_PRICE,
+    "KALTWASSER": CONF_COLD_WATER_PRICE,
+}
+
 
 # ---------------------------------------------------------------------------
 # Platform setup
@@ -205,6 +217,26 @@ async def async_setup_entry(
                     device_class=device_class,
                 )
             )
+
+    # Cost sensors (only if a price > 0 is configured in options)
+    for block in dashboard_blocks:
+        kf = block.get("keyFigure", "UNKNOWN")
+        price_key = _PRICE_CONF_KEY.get(kf)
+        if not price_key:
+            continue
+        price = entry.options.get(price_key, 0.0)
+        if not price:
+            continue
+        type_text = _TYPE_TEXT.get(kf, kf.title())
+        entities.append(
+            MinolCostSensor(
+                coordinator=coordinator,
+                entry=entry,
+                key_figure=kf,
+                type_text=type_text,
+                price=price,
+            )
+        )
 
     async_add_entities(entities)
 
@@ -376,3 +408,53 @@ class MinolRoomSensor(CoordinatorEntity[MinolDataCoordinator], SensorEntity):
             "weighting_factor": meter.get("bewertung"),
             "unit": meter.get("unit"),
         }
+
+
+class MinolCostSensor(CoordinatorEntity[MinolDataCoordinator], SensorEntity):
+    """Estimated cost sensor: current_year consumption * configured price."""
+
+    _attr_has_entity_name = True
+    _attr_device_class = SensorDeviceClass.MONETARY
+    _attr_state_class = SensorStateClass.TOTAL
+    _attr_native_unit_of_measurement = "\u20ac"
+    _attr_icon = "mdi:currency-eur"
+    _attr_suggested_display_precision = 2
+
+    def __init__(
+        self,
+        coordinator: MinolDataCoordinator,
+        entry: MinolConfigEntry,
+        key_figure: str,
+        type_text: str,
+        price: float,
+    ) -> None:
+        super().__init__(coordinator)
+        self._key_figure = key_figure
+        self._price = price
+
+        slug = f"{key_figure}_cost".lower()
+        self._attr_unique_id = f"{entry.entry_id}_{slug}"
+        self._attr_name = f"{type_text} Cost"
+        self._attr_device_info = {
+            "identifiers": {(DOMAIN, entry.entry_id)},
+            "name": "Minol eMonitoring",
+            "manufacturer": "Minol-ZENNER",
+            "model": "eMonitoring",
+            "entry_type": "service",
+        }
+
+    @property
+    def native_value(self) -> float | None:
+        dashboard_blocks = (
+            self.coordinator.data.get("dashboard", {}).get("dashboard") or []
+        )
+        for block in dashboard_blocks:
+            if block.get("keyFigure") == self._key_figure:
+                consumption = _extract(block, "data1_curr")
+                if consumption is not None:
+                    return round(consumption * self._price, 2)
+        return None
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        return {"price_per_unit": self._price}
