@@ -44,6 +44,7 @@ class _DashSensorDef:
     suffix: str  # e.g. "current_year", "previous_year"
     name_tpl: str  # e.g. "{type_text} Current Year"
     extractor: str  # Which data* array + index logic to use
+    state_class: SensorStateClass | None = None
 
 
 # We create these sensors for every consumption type in the dashboard.
@@ -52,11 +53,13 @@ _SENSOR_DEFS: list[_DashSensorDef] = [
         suffix="current_year",
         name_tpl="{type_text} Current Year",
         extractor="data1_curr",
+        state_class=SensorStateClass.TOTAL_INCREASING,
     ),
     _DashSensorDef(
         suffix="previous_year",
         name_tpl="{type_text} Previous Year",
         extractor="data1_prev",
+        state_class=SensorStateClass.TOTAL,
     ),
     _DashSensorDef(
         suffix="per_m2_current",
@@ -236,7 +239,8 @@ class MinolSensor(CoordinatorEntity[MinolDataCoordinator], SensorEntity):
         self._attr_native_unit_of_measurement = unit
         self._attr_icon = icon_str
         self._attr_device_class = device_class
-        self._attr_state_class = SensorStateClass.TOTAL
+        self._attr_state_class = sensor_def.state_class
+        self._attr_suggested_display_precision = 2
         self._attr_device_info = {
             "identifiers": {(DOMAIN, entry.entry_id)},
             "name": "Minol eMonitoring",
@@ -308,7 +312,8 @@ class MinolRoomSensor(CoordinatorEntity[MinolDataCoordinator], SensorEntity):
     """A sensor for a single meter in a room (RAUM view)."""
 
     _attr_has_entity_name = True
-    _attr_state_class = SensorStateClass.TOTAL
+    _attr_state_class = SensorStateClass.TOTAL_INCREASING
+    _attr_suggested_display_precision = 2
 
     def __init__(
         self,
