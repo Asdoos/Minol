@@ -39,7 +39,7 @@ created:
 | Cold Water per m² Previous Year | 0.30 m³/m² | Cold water per m² (previous) |
 | Cold Water DIN Average | 0.37 m³/m² | DIN reference |
 | Cold Water Building Share % | 15 % | Your share |
-| Tenant Info | Fabrikstr. 33, ... | Address with attributes (name, floor, move-in) |
+| Tenant Info | Street, ... | Address with attributes (name, floor, move-in) |
 
 ### Per-room / per-meter sensors
 
