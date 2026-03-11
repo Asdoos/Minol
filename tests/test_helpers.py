@@ -36,6 +36,26 @@ class TestExtractB2cSettings:
         result = _extract_b2c_settings(html)
         assert result == {"csrf": "tok2", "transId": "tx2", "policy": "B2C_1A_Q"}
 
+    def test_window_settings_pattern(self):
+        """Parses window.SETTINGS={...} — the format used by the current Minol B2C page."""
+        html = (
+            "<script>window.SETTINGS = "
+            '{"csrf":"tok3","transId":"tx3","policy":"B2C_1A_SIGNIN"};\n'
+            "</script>"
+        )
+        result = _extract_b2c_settings(html)
+        assert result == {"csrf": "tok3", "transId": "tx3", "policy": "B2C_1A_SIGNIN"}
+
+    def test_json_with_angle_bracket_in_value(self):
+        """Brace-counter extractor handles '<' inside JSON values (old regex broke on this)."""
+        html = (
+            "<script>window.SETTINGS = "
+            '{"csrf":"tok","transId":"tx","policy":"p","html":"a<b"};\n'
+            "</script>"
+        )
+        result = _extract_b2c_settings(html)
+        assert result["html"] == "a<b"
+
     def test_config_pattern_takes_priority_over_settings(self):
         """$Config wins when both patterns are present."""
         html = (

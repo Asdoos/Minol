@@ -32,19 +32,51 @@ class MinolConnectionError(Exception):
 def _extract_b2c_settings(html: str) -> dict[str, Any]:
     """Extract the Azure B2C page settings JSON from the login page HTML.
 
-    B2C login pages embed a JSON config object in a script tag, typically as
-    ``$Config={...}`` or ``var SETTINGS = {...}``.
+    B2C login pages embed a JSON config object in a script tag.  The exact
+    variable name has changed over time; we try several known patterns:
+
+    * ``$Config={...}`` (older B2C pages)
+    * ``var SETTINGS = {...}`` (intermediate variant)
+    * ``window.SETTINGS = {...}`` (current Minol B2C page as of 2025/2026)
+
+    For robustness the JSON body is extracted with a brace-counter rather than
+    a character-class regex, so embedded ``<`` characters don't cause failures.
     """
-    for pattern in (
-        r"\$Config\s*=\s*(\{[^<]+?\})\s*[;\n]",
-        r"var\s+SETTINGS\s*=\s*(\{[^<]+?\})\s*[;\n]",
-    ):
-        match = re.search(pattern, html, re.DOTALL)
-        if match:
-            try:
-                return json.loads(match.group(1))  # type: ignore[no-any-return]
-            except json.JSONDecodeError:
-                continue
+    # Patterns that precede the opening '{' of the settings object.
+    _PREFIXES = (
+        r"\$Config\s*=\s*",
+        r"var\s+SETTINGS\s*=\s*",
+        r"window\.SETTINGS\s*=\s*",
+    )
+
+    for prefix in _PREFIXES:
+        # Find the start of the JSON object.
+        m = re.search(prefix, html)
+        if not m:
+            continue
+        start = m.end()
+        if start >= len(html) or html[start] != "{":
+            continue
+
+        # Walk forward counting braces to find the matching '}'.
+        depth = 0
+        end = start
+        for i, ch in enumerate(html[start:], start):
+            if ch == "{":
+                depth += 1
+            elif ch == "}":
+                depth -= 1
+                if depth == 0:
+                    end = i + 1
+                    break
+        else:
+            continue  # unmatched braces – try next pattern
+
+        try:
+            return json.loads(html[start:end])  # type: ignore[no-any-return]
+        except json.JSONDecodeError:
+            continue
+
     return {}
 
 

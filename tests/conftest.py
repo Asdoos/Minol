@@ -114,10 +114,13 @@ def client() -> MinolApiClient:
 
 @pytest.fixture
 def b2c_html() -> str:
-    """Return a minimal B2C login page HTML with a valid $Config block."""
+    """Return a minimal B2C login page HTML with a valid window.SETTINGS block.
+
+    Mirrors the format currently used by the live Minol B2C login page.
+    """
     config = (
         '{"csrf":"test-csrf-token",'
         '"transId":"StateProperties=ABC123",'
         '"policy":"B2C_1A_SIGNIN"}'
     )
-    return f"<html><body><script>$Config={config};\n</script></body></html>"
+    return f"<html><body><script>window.SETTINGS = {config};\n</script></body></html>"
