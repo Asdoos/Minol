@@ -1,14 +1,15 @@
-"""API client for the Minol tenant portal."""
-
-from __future__ import annotations
-
+import asyncio
+import http.cookiejar
 import json
 import logging
 import re
+import urllib.parse
+import urllib.request
 from typing import Any
 from urllib.parse import urlparse
 
 import aiohttp
+from yarl import URL
 
 from .const import (
     B2C_ENTRY_URL,
@@ -95,6 +96,156 @@ def _b2c_base_url(url: str) -> str:
     return f"{parsed.scheme}://{parsed.netloc}"
 
 
+def _b2c_login_sync(username: str, password: str) -> dict[str, str]:
+    """Perform B2C login synchronously using urllib.
+
+    Azure B2C security checks (specifically for SelfAsserted endpoint) often
+    conflict with how aiohttp handles cookies (quote preservation) and URL
+    encoding in query parameters. urllib is more permissive/standard in ways
+    that Azure B2C expects.
+    """
+    cookie_jar = http.cookiejar.CookieJar()
+    opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cookie_jar))
+    opener.addheaders = [("User-Agent", USER_AGENT)]
+
+    # 1. Start SAML login flow → get redirected to B2C login page
+    try:
+        resp = opener.open(B2C_ENTRY_URL)
+        b2c_page_url = resp.url
+        html = resp.read().decode("utf-8", errors="ignore")
+    except Exception as exc:
+        raise MinolAuthError(f"Failed to reach B2C login page: {exc}") from exc
+
+    # 2. Extract settings (CSRF, TransID, Policy)
+    settings = _extract_b2c_settings(html)
+    if not settings:
+        raise MinolAuthError("Could not parse B2C settings from login page")
+
+    csrf = settings.get("csrf", "")
+    trans_id = settings.get("transId", "")
+    policy = settings.get("policy", "")
+
+    # Fallback for policy extraction from URL
+    if not policy:
+        parsed = urlparse(b2c_page_url)
+        parts = [p for p in parsed.path.split("/") if p]
+        if len(parts) >= 2:
+            policy = parts[1]
+
+    if not (csrf and trans_id and policy):
+        raise MinolAuthError("Incomplete B2C settings found")
+
+    base = _b2c_base_url(b2c_page_url)
+
+    # 3. POST credentials to SelfAsserted
+    self_asserted_url = f"{base}/SelfAsserted?tx={trans_id}&p={policy}"
+    post_data = urllib.parse.urlencode(
+        {
+            "request_type": "RESPONSE",
+            "signInName": username,
+            "password": password,
+        }
+    ).encode("utf-8")
+
+    req = urllib.request.Request(
+        self_asserted_url,
+        data=post_data,
+        headers={
+            "X-CSRF-TOKEN": csrf,
+            "Referer": b2c_page_url,
+            "X-Requested-With": "XMLHttpRequest",
+            "Accept": "application/json, text/javascript, */*; q=0.01",
+            "Content-Type": "application/x-www-form-urlencoded; charset=UTF-8",
+        },
+    )
+
+    try:
+        resp = opener.open(req)
+        body = resp.read().decode("utf-8")
+        result = json.loads(body)
+    except Exception as exc:
+        _LOGGER.debug(f"B2C credential post failed: {exc}")
+        raise MinolAuthError(f"B2C credential post failed: {exc}") from exc
+
+    if result.get("status") != "200":
+        msg = result.get("message", "Invalid username or password")
+        raise MinolAuthError(f"Authentication failed: {msg}")
+
+    # 4. Finalize/Confirm login → returns first SAML POST form
+    confirmed_url = (
+        f"{base}/api/CombinedSigninAndSignup/confirmed"
+        f"?csrf_token={csrf}&tx={trans_id}&p={policy}"
+    )
+    req_confirm = urllib.request.Request(
+        confirmed_url,
+        headers={
+            "X-CSRF-TOKEN": csrf,
+            "Referer": b2c_page_url,
+            "X-Requested-With": "XMLHttpRequest",
+        },
+    )
+
+    try:
+        resp_conf = opener.open(req_confirm)
+        conf_html = resp_conf.read().decode("utf-8")
+        
+        # Step 5: First SAML POST to ACS
+        saml_match = re.search(r'name=[\'\"]SAMLResponse[\'\"]\s+id=[\'\"]SAMLResponse[\'\"]\s+value=[\'\"](.*?)[\'\"]', conf_html)
+        relay_match = re.search(r'name=[\'\"]RelayState[\'\"]\s+id=[\'\"]RelayState[\'\"]\s+value=[\'\"](.*?)[\'\"]', conf_html)
+        
+        if saml_match and relay_match:
+            acs_url = "https://webservices.minol.com/saml2/sp/acs"
+            acs_data = urllib.parse.urlencode({
+                "SAMLResponse": saml_match.group(1),
+                "RelayState": relay_match.group(1)
+            }).encode("utf-8")
+            
+            req_acs = urllib.request.Request(
+                acs_url, 
+                data=acs_data, 
+                headers={"Referer": confirmed_url}
+            )
+            resp_acs = opener.open(req_acs)
+            acs_body = resp_acs.read().decode("utf-8")
+            
+            # Step 6: Second SAML POST to Portal
+            saml_match2 = re.search(r'name=[\'\"]SAMLResponse[\'\"]\s+value=[\'\"](.*?)[\'\"]', acs_body)
+            relay_match2 = re.search(r'name=[\'\"]RelayState[\'\"]\s+value=[\'\"](.*?)[\'\"]', acs_body)
+            
+            if saml_match2 and relay_match2:
+                portal_url = "https://webservices.minol.com/minol.com~kundenportal~login~saml/?logonTargetUrl=https%3A%2F%2Fwebservices.minol.com%2F&saml2idp=B2C-Minol-Tenant"
+                portal_data = urllib.parse.urlencode({
+                    "SAMLResponse": saml_match2.group(1),
+                    "RelayState": relay_match2.group(1),
+                    "saml2post": "false"
+                }).encode("utf-8")
+                
+                req_portal = urllib.request.Request(
+                    portal_url, 
+                    data=portal_data, 
+                    headers={"Referer": acs_url}
+                )
+                opener.open(req_portal)
+
+    except Exception as exc:
+        _LOGGER.debug("Error during SAML post-login steps: %s", exc)
+        # We continue to cookie extraction anyway, might have enough partial state
+
+    # 5. Extract authenticated cookies for minol.com
+    auth_cookies = {}
+    for cookie in cookie_jar:
+        if "minol.com" in cookie.domain:
+            auth_cookies[cookie.name] = cookie.value
+
+    if "MYSAPSSO2" not in auth_cookies:
+        _LOGGER.debug("MYSAPSSO2 cookie not found in jar: %s", list(auth_cookies.keys()))
+        # If we got NO cookies, that's a hard error
+        if not auth_cookies:
+            raise MinolAuthError("No authentication cookies received following B2C flow")
+
+    return auth_cookies
+
+
 class MinolApiClient:
     """Async client for the Minol eMonitoring portal.
 
@@ -138,94 +289,38 @@ class MinolApiClient:
     # ------------------------------------------------------------------
 
     async def authenticate(self) -> bool:
-        """Login via Azure B2C / SAML.  Returns True on success.
+        """Authenticate with Minol using Azure B2C SAML flow.
 
-        Flow:
-          1. GET ``B2C_ENTRY_URL`` (``/?redirect2=true``) → follows redirects
-             to the Azure AD B2C login page at ``minolauth.b2clogin.com``.
-          2. Parse ``$Config`` JSON embedded in the page to obtain the CSRF
-             token, transaction-ID and policy name.
-          3. POST credentials to the B2C *SelfAsserted* endpoint.
-          4. GET the *confirmed* endpoint → B2C redirects to the Minol SAML
-             ACS, which issues the ``MYSAPSSO2`` session cookie.
-          5. Verify ``MYSAPSSO2`` is present in the cookie jar.
+        Uses urllib in a background thread for the B2C interaction because
+        aiohttp has known incompatibilities with Azure B2C security filters.
         """
         session = self._ensure_session()
+        session.cookie_jar.clear()
 
         try:
-            # 1. Reach the B2C login page.
-            async with session.get(B2C_ENTRY_URL, allow_redirects=True) as resp:
-                b2c_page_url = str(resp.url)
-                html = await resp.text()
-
-            _LOGGER.debug("Reached B2C login page: %s", b2c_page_url)
-
-            # 2. Parse page settings.
-            settings = _extract_b2c_settings(html)
-            if not settings:
-                raise MinolAuthError(
-                    "Could not parse Azure B2C login page – $Config not found"
-                )
-
-            csrf = settings.get("csrf", "")
-            trans_id = settings.get("transId", "")
-            policy = settings.get("policy", "")
-            base = _b2c_base_url(b2c_page_url)
-
-            if not (csrf and trans_id and policy):
-                raise MinolAuthError(
-                    "Incomplete B2C settings: "
-                    f"csrf={bool(csrf)}, transId={bool(trans_id)}, "
-                    f"policy={bool(policy)}"
-                )
-
-            # 3. POST credentials to SelfAsserted endpoint.
-            self_asserted_url = f"{base}/SelfAsserted?tx={trans_id}&p={policy}"
-            async with session.post(
-                self_asserted_url,
-                data={
-                    "request_type": "RESPONSE",
-                    "signInName": self._username,
-                    "password": self._password,
-                },
-                headers={
-                    "X-CSRF-TOKEN": csrf,
-                    "Referer": b2c_page_url,
-                },
-                allow_redirects=False,
-            ) as resp:
-                body = await resp.text()
-                try:
-                    result: dict[str, Any] = json.loads(body)
-                except json.JSONDecodeError:
-                    result = {}
-
-                if result.get("status") != "200":
-                    msg = result.get("message", "Invalid username or password")
-                    raise MinolAuthError(f"Authentication failed: {msg}")
-
-            # 4. Confirm → triggers SAML redirect back to Minol ACS.
-            confirmed_url = (
-                f"{base}/api/{trans_id}/confirmed"
-                f"?csrf_token={csrf}&tx={trans_id}&p={policy}"
+            _LOGGER.debug("Starting B2C authentication flow via urllib thread")
+            cookies = await asyncio.to_thread(
+                _b2c_login_sync, self._username, self._password
             )
-            async with session.get(confirmed_url, allow_redirects=True):
-                pass
 
-            # 5. Verify MYSAPSSO2 cookie.
-            cookie_names = {c.key for c in session.cookie_jar}
-            if "MYSAPSSO2" not in cookie_names:
-                raise MinolAuthError(
-                    "Authentication failed – no MYSAPSSO2 cookie received"
-                )
+            _LOGGER.debug("B2C authentication successful, updating aiohttp session")
+            session.cookie_jar.update_cookies(cookies, URL(BASE_URL))
 
-        except aiohttp.ClientError as err:
-            raise MinolConnectionError(
-                f"Cannot reach Minol portal: {err}"
-            ) from err
+            # Verify by attempting to fetch tenants (which requires valid session)
+            tenants = await self.get_user_tenants()
+            if not tenants:
+                _LOGGER.error("Authentication verified but no tenants found")
+                return True
 
-        _LOGGER.debug("Minol authentication successful")
-        return True
+            _LOGGER.debug("Authentication verified successfully")
+            return True
+
+        except MinolAuthError as err:
+            _LOGGER.error("Authentication failed: %s", err)
+            raise
+        except Exception as exc:
+            _LOGGER.error("Unexpected error during authentication: %s", exc)
+            raise MinolAuthError(f"Unexpected error: {exc}") from exc
 
     # ------------------------------------------------------------------
     # Low-level helpers
