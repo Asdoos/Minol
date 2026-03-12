@@ -4,9 +4,10 @@
 [![HA Version](https://img.shields.io/badge/HA-2024.1%2B-blue.svg)](https://www.home-assistant.io/)
 
 A custom [Home Assistant](https://www.home-assistant.io/) integration that reads
-consumption data from the **Minol MinolApp mobile API** (Mulesoft Experience API).
+consumption data from the **Minol eMonitoring portal** using the same API as the
+official Minol iOS/Android app.
 
-Authentication uses the same Azure B2C OAuth2 flow as the official Minol iOS/Android app.
+Authentication uses the same Azure B2C OAuth2 flow as the official app.
 Tokens are refreshed silently in the background — you only need to log in once.
 
 ---
@@ -121,7 +122,9 @@ Setting a price to `0` disables the corresponding cost sensor.
 
 ### Debug logging
 
-Add to `configuration.yaml`:
+Go to **Settings → System → Logs**, find **Minol Energy** in the integration list, and click **Enable debug logging**. No `configuration.yaml` changes needed.
+
+Alternatively, add to `configuration.yaml`:
 
 ```yaml
 logger:
@@ -129,7 +132,7 @@ logger:
     custom_components.minol_energy: debug
 ```
 
-Logs include every API request/response, token expiry times, and refresh attempts.
+Debug logs include every API request/response, token expiry times, and refresh attempts.
 
 ### Diagnostics
 

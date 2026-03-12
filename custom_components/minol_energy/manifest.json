@@ -1,11 +1,13 @@
 {
   "domain": "minol_energy",
   "name": "Minol Energy",
-  "codeowners": ["@dewey"],
+  "codeowners": ["@Asdoos"],
   "config_flow": true,
-  "documentation": "https://github.com/dewey/Minol",
+  "documentation": "https://github.com/Asdoos/Minol",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/dewey/Minol/issues",
+  "issue_tracker": "https://github.com/Asdoos/Minol/issues",
+  "loggers": ["custom_components.minol_energy"],
   "requirements": [],
+  "single_config_entry": true,
   "version": "0.3.0"
 }

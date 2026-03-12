@@ -37,7 +37,7 @@ _LOGGER = logging.getLogger(__name__)
 
 _DEVICE_INFO_BASE = {
     "manufacturer": "Minol-ZENNER",
-    "model": "MinolApp API",
+    "model": "eMonitoring",
     "entry_type": "service",
 }
 
