@@ -10,7 +10,7 @@ A [HACS](https://hacs.xyz/) custom integration for Home Assistant that reads con
 
 There is no local test runner or build step. Development is done by copying `custom_components/minol_energy/` into a Home Assistant config directory (or a dev container) and restarting HA.
 
-Linting (run from repo root):
+Linting (run from repo root, also runs in CI on every push/PR):
 ```bash
 ruff check custom_components/
 ruff format custom_components/
@@ -25,6 +25,12 @@ Tests:
 ```bash
 uv run pytest tests/test_api_unit.py -v          # unit tests (no credentials needed)
 uv run pytest tests/test_api_live.py -v -s       # live tests (requires MINOL_ACCESS_TOKEN)
+```
+
+To get a live token for testing:
+```bash
+uv run python scripts/get_token.py
+# Follow prompts, then export the printed MINOL_ACCESS_TOKEN / MINOL_REFRESH_TOKEN
 ```
 
 ## Architecture
@@ -50,7 +56,8 @@ api.py             MinolApiClient — the only file that makes HTTP requests.
                    _request() retries once on 401/403 via token refresh.
 
 sensor.py          Builds sensor entities from coordinator.data. Creates energy/volume,
-                   CO₂, and (optional) cost sensors per active service type.
+                   CO₂ (heating and hot water only — not cold water), and (optional)
+                   cost sensors per active service type.
 
 config_flow.py     ConfigFlow + OptionsFlow. OAuth2 Authorization Code + PKCE flow:
                    HA builds the auth URL, user logs in via browser, pastes the
