@@ -16,7 +16,7 @@ Tokens are refreshed silently in the background — you only need to log in once
 
 - **Energy Dashboard compatible** — consumption sensors use `TOTAL_INCREASING` and can be added to the HA Energy Dashboard
 - **Heating, hot water, and cold water** sensors with kWh and volume values
-- **CO₂ tracking** — carbon intensity sensor per service
+- **CO₂ tracking** — carbon intensity sensor for heating and hot water
 - **Cost estimation** — configure energy prices to see estimated monthly costs
 - **Configurable update interval** — 15 min to 24 h polling
 - **Silent token refresh** — access tokens are renewed automatically; the refresh token is good for 14 days
@@ -37,7 +37,6 @@ For each service type available on your account (heating, hot water, cold water)
 | Hot Water Latest Month | kWh | Hot water energy consumption |
 | Hot Water CO₂ Latest Month | kg | CO₂ equivalent for hot water |
 | Cold Water Latest Month | m³ | Cold water volume consumption |
-| Cold Water CO₂ Latest Month | kg | CO₂ equivalent for cold water |
 
 Which sensors appear depends on which services your property has metered.
 Cost sensors are created automatically when a non-zero price is set in Options.
