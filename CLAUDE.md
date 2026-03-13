@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-A [HACS](https://hacs.xyz/) custom integration for Home Assistant that reads consumption data (heating, hot water, cold water) from the Minol eMonitoring tenant portal (`webservices.minol.com`). Requires HA ≥ 2024.1. No Python package dependencies — only `aiohttp`, which ships with Home Assistant.
+A [HACS](https://hacs.xyz/) custom integration for Home Assistant that reads consumption data (heating, hot water, cold water) from the **Minol eMonitoring portal** using the same API as the official Minol iOS/Android app. Requires HA ≥ 2024.1. No Python package dependencies — only `aiohttp`, which ships with Home Assistant.
 
 ## Development commands
 
@@ -21,13 +21,20 @@ Type checking:
 pyright custom_components/
 ```
 
+Tests:
+```bash
+uv run pytest tests/test_api_unit.py -v          # unit tests (no credentials needed)
+uv run pytest tests/test_api_live.py -v -s       # live tests (requires MINOL_ACCESS_TOKEN)
+```
+
 ## Architecture
 
 All code lives in `custom_components/minol_energy/`. The integration follows the standard HA pattern: config entry → coordinator → sensor platform.
 
 ```
-__init__.py        Entry setup/teardown. Creates MinolApiClient, calls authenticate(),
+__init__.py        Entry setup/teardown. Creates MinolApiClient with stored OAuth2 tokens,
                    creates MinolDataCoordinator, forwards to PLATFORMS = [SENSOR].
+                   Handles token persistence via on_tokens_refreshed callback.
 
 coordinator.py     MinolDataCoordinator (DataUpdateCoordinator). Calls
                    client.get_all_data() on every poll, maps MinolAuthError →
@@ -35,54 +42,58 @@ coordinator.py     MinolDataCoordinator (DataUpdateCoordinator). Calls
                    MinolConnectionError → UpdateFailed.
 
 api.py             MinolApiClient — the only file that makes HTTP requests.
-                   authenticate() implements the Azure B2C / SAML flow (5 steps).
-                   get_all_data() calls getUserTenants, getLayerInfo, readData
-                   (dashboard), and readData for each available RAUM view.
-                   _request() retries once on 401/403 via re-authentication.
+                   Takes OAuth2 tokens (access_token, refresh_token) obtained via
+                   the config flow. Silently refreshes the access_token using the
+                   refresh_token when needed.
+                   get_all_data() calls /profiles, /masterdata, /consumptions/availableData,
+                   and /consumptions for the last 3 months.
+                   _request() retries once on 401/403 via token refresh.
 
-sensor.py          Builds sensor entities from coordinator.data. Dashboard sensors
-                   are derived from the JSON structure returned by readData
-                   (data1/data2/data3 arrays). Per-room sensors come from the
-                   "rooms" key (table entries per RAUM view). Cost sensors are
-                   created when a non-zero price is configured in options.
+sensor.py          Builds sensor entities from coordinator.data. Creates energy/volume,
+                   CO₂, and (optional) cost sensors per active service type.
 
-config_flow.py     ConfigFlow + OptionsFlow. Credentials stored under CONF_USERNAME /
-                   CONF_PASSWORD. Options: scan_interval, heating/hot_water/cold_water
-                   prices.
+config_flow.py     ConfigFlow + OptionsFlow. OAuth2 Authorization Code + PKCE flow:
+                   HA builds the auth URL, user logs in via browser, pastes the
+                   resulting redirect URL (https://oauth.pstmn.io/v1/callback?code=…)
+                   back into HA. HA exchanges the code for tokens and stores them.
+                   Options: scan_interval, heating/hot_water/cold_water prices.
 
-const.py           All constants. Key ones: BASE_URL, B2C_ENTRY_URL (auth entry
-                   point), EMDATA_REST (REST API base path).
+const.py           All constants. Key ones: B2C_AUTH_URL, B2C_TOKEN_URL (Azure B2C),
+                   API_BASE_URL (Mulesoft), API_CLIENT_ID/SECRET, B2C_CLIENT_ID/SECRET.
 
-diagnostics.py     Async diagnostics export; redacts personal fields from coordinator
-                   data before returning.
+diagnostics.py     Async diagnostics export; redacts tokens and personal fields
+                   (userID, email, name, address) before returning.
 ```
 
 ## Authentication
 
-The portal uses Azure AD B2C (SAML SP-initiated). `authenticate()` in `api.py`:
-1. GET `/?redirect2=true` → follows redirects to `minolauth.b2clogin.com`
-2. Parses `$Config` JSON from the B2C HTML page (CSRF token, `transId`, `policy`)
-3. POSTs credentials to `{base}/SelfAsserted?tx={transId}&p={policy}` (expects `{"status":"200"}`)
-4. GETs `{base}/api/{transId}/confirmed` → triggers SAML redirect back to Minol ACS
-5. Verifies `MYSAPSSO2` cookie is present
+The app uses **Azure AD B2C OAuth2 Authorization Code + PKCE** via the Minol mobile app's B2C tenant (`minolauth.b2clogin.com`). The redirect URI is `https://oauth.pstmn.io/v1/callback` (the Postman OAuth2 callback, registered in the B2C app alongside the native app scheme).
 
-Helper functions `_extract_b2c_settings()` and `_b2c_base_url()` handle parsing.
+`config_flow.py` auth flow:
+1. HA generates a PKCE `code_verifier` / `code_challenge` and builds an authorization URL.
+2. User opens the URL in their browser and logs in with their Minol account.
+3. B2C redirects to `https://oauth.pstmn.io/v1/callback?code=…`
+4. User copies that full URL and pastes it into HA.
+5. HA extracts the `code` and POSTs to `B2C_TOKEN_URL` to exchange it for `access_token` + `refresh_token`.
+6. Tokens stored in config entry; access token (~1 h TTL) is silently refreshed using the refresh token (~14 days).
 
 ## API data shape
 
 `get_all_data()` returns:
 ```python
 {
-    "tenants": [...],          # list from getUserTenants
-    "tenant_info": {...},      # tenants[0]
-    "user_num": "...",         # tenants[0]["userNumber"]
-    "layer_info": {...},       # from getLayerInfo (contains "views" list)
-    "dashboard": {...},        # from readData with dlgKey="dashboard"
-    "rooms": {                 # keyed by consType (HEIZUNG/WARMWASSER/KALTWASSER)
-        "HEIZUNG": [...],      # table rows from readData for 100EHRAUM view
-        ...
-    },
+    "profile": {...},              # from GET /profiles → data[0]
+    "billing_unit_id": "...",      # profile["billingUnit"]
+    "residential_unit_id": "...",  # profile["residentialUnitReference"]["residentialUnitID"]
+    "masterdata": {...},           # from GET /billingUnit/{bu}/residentialUnit/{ru}/masterdata
+    "latest_consumption": {...},   # most recent consumption period with UVI_AVAILABLE status
+    "available_periods": [...],    # from GET .../consumptions/availableData
 }
 ```
 
-Dashboard `readData` responses contain `data1` (yearly totals), `data2_*` (building share), `data3` (per-m² + DIN reference) arrays. Room `readData` responses contain a `table` array with per-meter entries.
+Consumption periods contain a `consumptions` list, one entry per service code:
+- `"100"` = Heating (HEIZUNG)
+- `"200"` = Hot Water (WARMWASSER)
+- `"300"` = Cold Water (KALTWASSER)
+
+Each entry has `energyValue` (kWh or m³), `serviceValue` (raw meter unit), `co2kg`, `estimated`, etc.
