@@ -1,5 +1,7 @@
 # Minol Energy — Home Assistant Integration
 
+<img src="custom_components/minol_energy/icon.png" alt="Minol Energy" width="100">
+
 [![HACS Custom](https://img.shields.io/badge/HACS-Custom-blue.svg)](https://hacs.xyz/)
 [![HA Version](https://img.shields.io/badge/HA-2024.1%2B-blue.svg)](https://www.home-assistant.io/)
 
