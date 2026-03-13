@@ -1,6 +1,6 @@
 [project]
 name = "minol-energy"
-version = "0.3.0"
+version = "0.3.1"
 description = "Home Assistant integration for the Minol tenant energy portal"
 requires-python = ">=3.12"
 dependencies = [
