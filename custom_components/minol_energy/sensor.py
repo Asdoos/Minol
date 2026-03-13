@@ -126,21 +126,22 @@ async def async_setup_entry(
                 icon=svc.icon,
             )
         )
-        # CO2 sensor
-        entities.append(
-            MinolConsumptionSensor(
-                coordinator=coordinator,
-                entry=entry,
-                service=svc,
-                field="co2kg",
-                suffix="co2_latest_month",
-                name=f"{svc.type_text} CO₂ Latest Month",
-                unit=UnitOfMass.KILOGRAMS,
-                state_class=SensorStateClass.MEASUREMENT,
-                device_class=SensorDeviceClass.WEIGHT,
-                icon="mdi:molecule-co2",
+        # CO2 sensor (cold water has no CO₂ equivalent)
+        if svc.service_code != SERVICE_COLD_WATER:
+            entities.append(
+                MinolConsumptionSensor(
+                    coordinator=coordinator,
+                    entry=entry,
+                    service=svc,
+                    field="co2kg",
+                    suffix="co2_latest_month",
+                    name=f"{svc.type_text} CO₂ Latest Month",
+                    unit=UnitOfMass.KILOGRAMS,
+                    state_class=SensorStateClass.MEASUREMENT,
+                    device_class=SensorDeviceClass.WEIGHT,
+                    icon="mdi:molecule-co2",
+                )
             )
-        )
         # Cost sensor (only when price configured)
         price = entry.options.get(_PRICE_CONF_KEY.get(svc.service_code, ""), 0.0)
         if price:
