@@ -39,5 +39,21 @@
         }
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "heating_latest_month":       { "name": "Heizung Letzter Monat" },
+      "hot_water_latest_month":     { "name": "Warmwasser Letzter Monat" },
+      "cold_water_latest_month":    { "name": "Kaltwasser Letzter Monat" },
+      "heating_co2_latest_month":   { "name": "Heizung CO\u2082 Letzter Monat" },
+      "hot_water_co2_latest_month": { "name": "Warmwasser CO\u2082 Letzter Monat" },
+      "heating_cost":               { "name": "Heizkosten" },
+      "hot_water_cost":             { "name": "Warmwasserkosten" },
+      "cold_water_cost":            { "name": "Kaltwasserkosten" },
+      "tenant_info":                { "name": "Wohneinheit" },
+      "room_heating":               { "name": "{room} Heizung" },
+      "room_hot_water":             { "name": "{room} Warmwasser" },
+      "room_cold_water":            { "name": "{room} Kaltwasser" }
+    }
   }
 }

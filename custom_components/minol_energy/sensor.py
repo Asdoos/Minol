@@ -28,6 +28,7 @@ from .const import (
     CONF_HOT_WATER_PRICE,
     DOMAIN,
     ROOM_TYPE_NAMES,
+    ROOM_TYPE_NAMES_DE,
     SERVICE_COLD_WATER,
     SERVICE_HEATING,
     SERVICE_HOT_WATER,
@@ -55,11 +56,15 @@ def _build_device_info(entry_id: str) -> dict:
 @dataclass(frozen=True)
 class _ServiceMeta:
     service_code: str
-    type_text: str
+    type_text: str  # kept for room sensor fallback names
     icon: str
     energy_unit: str
     service_unit: str  # raw meter unit shown in attributes
     device_class: SensorDeviceClass | None
+    translation_key: str       # main consumption sensor
+    co2_translation_key: str   # CO₂ sensor ("" for cold water)
+    cost_translation_key: str  # cost sensor
+    room_translation_key: str  # room sensor
 
 
 _SERVICES: list[_ServiceMeta] = [
@@ -70,6 +75,10 @@ _SERVICES: list[_ServiceMeta] = [
         energy_unit=UnitOfEnergy.KILO_WATT_HOUR,
         service_unit="EH",
         device_class=SensorDeviceClass.ENERGY,
+        translation_key="heating_latest_month",
+        co2_translation_key="heating_co2_latest_month",
+        cost_translation_key="heating_cost",
+        room_translation_key="room_heating",
     ),
     _ServiceMeta(
         service_code=SERVICE_HOT_WATER,
@@ -78,6 +87,10 @@ _SERVICES: list[_ServiceMeta] = [
         energy_unit=UnitOfEnergy.KILO_WATT_HOUR,
         service_unit="m³",
         device_class=SensorDeviceClass.ENERGY,
+        translation_key="hot_water_latest_month",
+        co2_translation_key="hot_water_co2_latest_month",
+        cost_translation_key="hot_water_cost",
+        room_translation_key="room_hot_water",
     ),
     _ServiceMeta(
         service_code=SERVICE_COLD_WATER,
@@ -86,6 +99,10 @@ _SERVICES: list[_ServiceMeta] = [
         energy_unit=UnitOfVolume.CUBIC_METERS,
         service_unit="m³",
         device_class=SensorDeviceClass.WATER,
+        translation_key="cold_water_latest_month",
+        co2_translation_key="",
+        cost_translation_key="cold_water_cost",
+        room_translation_key="room_cold_water",
     ),
 ]
 
@@ -109,6 +126,9 @@ async def async_setup_entry(
     """Set up Minol sensors from a config entry."""
     coordinator: MinolDataCoordinator = entry.runtime_data
 
+    lang = hass.config.language
+    room_names = ROOM_TYPE_NAMES_DE if lang.startswith("de") else ROOM_TYPE_NAMES
+
     entities: list[SensorEntity] = [
         MinolTenantInfoSensor(coordinator, entry),
     ]
@@ -129,7 +149,7 @@ async def async_setup_entry(
                 service=svc,
                 field="energyValue",
                 suffix="latest_month",
-                name=f"{svc.type_text} Latest Month",
+                translation_key=svc.translation_key,
                 unit=svc.energy_unit,
                 state_class=SensorStateClass.TOTAL,
                 device_class=svc.device_class,
@@ -137,7 +157,7 @@ async def async_setup_entry(
             )
         )
         # CO2 sensor (cold water has no CO₂ equivalent)
-        if svc.service_code != SERVICE_COLD_WATER:
+        if svc.co2_translation_key:
             entities.append(
                 MinolConsumptionSensor(
                     coordinator=coordinator,
@@ -145,7 +165,7 @@ async def async_setup_entry(
                     service=svc,
                     field="co2kg",
                     suffix="co2_latest_month",
-                    name=f"{svc.type_text} CO₂ Latest Month",
+                    translation_key=svc.co2_translation_key,
                     unit=UnitOfMass.KILOGRAMS,
                     state_class=SensorStateClass.MEASUREMENT,
                     device_class=SensorDeviceClass.WEIGHT,
@@ -212,6 +232,7 @@ async def async_setup_entry(
                                 entry=entry,
                                 service=svc,
                                 room_id=room_id,
+                                room_names=room_names,
                             )
                         )
         if new_entities:
@@ -269,7 +290,7 @@ class MinolConsumptionSensor(CoordinatorEntity[MinolDataCoordinator], SensorEnti
         service: _ServiceMeta,
         field: str,
         suffix: str,
-        name: str,
+        translation_key: str,
         unit: str | None,
         state_class: SensorStateClass | None,
         device_class: SensorDeviceClass | None,
@@ -281,7 +302,7 @@ class MinolConsumptionSensor(CoordinatorEntity[MinolDataCoordinator], SensorEnti
 
         slug = f"{service.service_code}_{suffix}".lower()
         self._attr_unique_id = f"{entry.entry_id}_{slug}"
-        self._attr_name = name
+        self._attr_translation_key = translation_key
         self._attr_native_unit_of_measurement = unit
         self._attr_state_class = state_class
         self._attr_device_class = device_class
@@ -318,6 +339,7 @@ class MinolTenantInfoSensor(CoordinatorEntity[MinolDataCoordinator], SensorEntit
 
     _attr_has_entity_name = True
     _attr_icon = "mdi:home-account"
+    _attr_translation_key = "tenant_info"
 
     def __init__(
         self,
@@ -326,7 +348,6 @@ class MinolTenantInfoSensor(CoordinatorEntity[MinolDataCoordinator], SensorEntit
     ) -> None:
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_tenant_info"
-        self._attr_name = "Tenant Info"
         self._attr_device_info = _build_device_info(entry.entry_id)
 
     @property
@@ -384,7 +405,7 @@ class MinolCostSensor(CoordinatorEntity[MinolDataCoordinator], SensorEntity):
 
         slug = f"{service.service_code}_cost".lower()
         self._attr_unique_id = f"{entry.entry_id}_{slug}"
-        self._attr_name = f"{service.type_text} Cost"
+        self._attr_translation_key = service.cost_translation_key
         self._attr_device_info = _build_device_info(entry.entry_id)
 
     @property
@@ -419,15 +440,17 @@ class MinolRoomSensor(CoordinatorEntity[MinolDataCoordinator], SensorEntity):
         entry: MinolConfigEntry,
         service: _ServiceMeta,
         room_id: str,
+        room_names: dict[str, str],
     ) -> None:
         super().__init__(coordinator)
         self._service = service
         self._room_id = room_id
 
-        room_name = ROOM_TYPE_NAMES.get(room_id) or f"Room {room_id.lstrip('0') or room_id}"
+        room_name = room_names.get(room_id) or f"Room {room_id.lstrip('0') or room_id}"
         slug = f"room_{room_id}_{service.service_code}"
         self._attr_unique_id = f"{entry.entry_id}_{slug}"
-        self._attr_name = f"{room_name} {service.type_text}"
+        self._attr_translation_key = service.room_translation_key
+        self._attr_translation_placeholders = {"room": room_name}
         self._attr_native_unit_of_measurement = service.energy_unit
         self._attr_device_class = service.device_class
         self._attr_icon = service.icon

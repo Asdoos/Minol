@@ -39,5 +39,21 @@
         }
       }
     }
+  },
+  "entity": {
+    "sensor": {
+      "heating_latest_month":       { "name": "Heating Latest Month" },
+      "hot_water_latest_month":     { "name": "Hot Water Latest Month" },
+      "cold_water_latest_month":    { "name": "Cold Water Latest Month" },
+      "heating_co2_latest_month":   { "name": "Heating CO₂ Latest Month" },
+      "hot_water_co2_latest_month": { "name": "Hot Water CO₂ Latest Month" },
+      "heating_cost":               { "name": "Heating Cost" },
+      "hot_water_cost":             { "name": "Hot Water Cost" },
+      "cold_water_cost":            { "name": "Cold Water Cost" },
+      "tenant_info":                { "name": "Unit Info" },
+      "room_heating":               { "name": "{room} Heating" },
+      "room_hot_water":             { "name": "{room} Hot Water" },
+      "room_cold_water":            { "name": "{room} Cold Water" }
+    }
   }
 }
