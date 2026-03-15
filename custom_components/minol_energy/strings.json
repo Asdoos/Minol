@@ -50,10 +50,7 @@
       "heating_cost":               { "name": "Heating Cost" },
       "hot_water_cost":             { "name": "Hot Water Cost" },
       "cold_water_cost":            { "name": "Cold Water Cost" },
-      "tenant_info":                { "name": "Unit Info" },
-      "room_heating":               { "name": "{room} Heating" },
-      "room_hot_water":             { "name": "{room} Hot Water" },
-      "room_cold_water":            { "name": "{room} Cold Water" }
+      "tenant_info":                { "name": "Unit Info" }
     }
   }
 }

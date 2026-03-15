@@ -56,7 +56,8 @@ def _build_device_info(entry_id: str) -> dict:
 @dataclass(frozen=True)
 class _ServiceMeta:
     service_code: str
-    type_text: str  # kept for room sensor fallback names
+    type_text: str      # English service name (room sensor _attr_name)
+    type_text_de: str   # German service name (room sensor _attr_name)
     icon: str
     energy_unit: str
     service_unit: str  # raw meter unit shown in attributes
@@ -64,13 +65,13 @@ class _ServiceMeta:
     translation_key: str       # main consumption sensor
     co2_translation_key: str   # CO₂ sensor ("" for cold water)
     cost_translation_key: str  # cost sensor
-    room_translation_key: str  # room sensor
 
 
 _SERVICES: list[_ServiceMeta] = [
     _ServiceMeta(
         service_code=SERVICE_HEATING,
         type_text="Heating",
+        type_text_de="Heizung",
         icon="mdi:radiator",
         energy_unit=UnitOfEnergy.KILO_WATT_HOUR,
         service_unit="EH",
@@ -78,11 +79,11 @@ _SERVICES: list[_ServiceMeta] = [
         translation_key="heating_latest_month",
         co2_translation_key="heating_co2_latest_month",
         cost_translation_key="heating_cost",
-        room_translation_key="room_heating",
     ),
     _ServiceMeta(
         service_code=SERVICE_HOT_WATER,
         type_text="Hot Water",
+        type_text_de="Warmwasser",
         icon="mdi:water-boiler",
         energy_unit=UnitOfEnergy.KILO_WATT_HOUR,
         service_unit="m³",
@@ -90,11 +91,11 @@ _SERVICES: list[_ServiceMeta] = [
         translation_key="hot_water_latest_month",
         co2_translation_key="hot_water_co2_latest_month",
         cost_translation_key="hot_water_cost",
-        room_translation_key="room_hot_water",
     ),
     _ServiceMeta(
         service_code=SERVICE_COLD_WATER,
         type_text="Cold Water",
+        type_text_de="Kaltwasser",
         icon="mdi:water",
         energy_unit=UnitOfVolume.CUBIC_METERS,
         service_unit="m³",
@@ -102,7 +103,6 @@ _SERVICES: list[_ServiceMeta] = [
         translation_key="cold_water_latest_month",
         co2_translation_key="",
         cost_translation_key="cold_water_cost",
-        room_translation_key="room_cold_water",
     ),
 ]
 
@@ -127,7 +127,8 @@ async def async_setup_entry(
     coordinator: MinolDataCoordinator = entry.runtime_data
 
     lang = hass.config.language
-    room_names = ROOM_TYPE_NAMES_DE if lang.startswith("de") else ROOM_TYPE_NAMES
+    use_de = lang.startswith("de")
+    room_names = ROOM_TYPE_NAMES_DE if use_de else ROOM_TYPE_NAMES
 
     entities: list[SensorEntity] = [
         MinolTenantInfoSensor(coordinator, entry),
@@ -233,13 +234,13 @@ async def async_setup_entry(
                                 service=svc,
                                 room_id=room_id,
                                 room_names=room_names,
+                                use_de=use_de,
                             )
                         )
         if new_entities:
             _LOGGER.debug(
-                "Adding %d new room sensor(s): %s",
+                "Adding %d new room sensor(s)",
                 len(new_entities),
-                [e.name for e in new_entities],
             )
             async_add_entities(new_entities)
         elif total_devices == 0:
@@ -441,16 +442,17 @@ class MinolRoomSensor(CoordinatorEntity[MinolDataCoordinator], SensorEntity):
         service: _ServiceMeta,
         room_id: str,
         room_names: dict[str, str],
+        use_de: bool,
     ) -> None:
         super().__init__(coordinator)
         self._service = service
         self._room_id = room_id
 
         room_name = room_names.get(room_id) or f"Room {room_id.lstrip('0') or room_id}"
+        type_text = service.type_text_de if use_de else service.type_text
         slug = f"room_{room_id}_{service.service_code}"
         self._attr_unique_id = f"{entry.entry_id}_{slug}"
-        self._attr_translation_key = service.room_translation_key
-        self._attr_translation_placeholders = {"room": room_name}
+        self._attr_name = f"{room_name} {type_text}"
         self._attr_native_unit_of_measurement = service.energy_unit
         self._attr_device_class = service.device_class
         self._attr_icon = service.icon
