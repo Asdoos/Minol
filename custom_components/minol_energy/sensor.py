@@ -27,6 +27,7 @@ from .const import (
     CONF_HEATING_PRICE,
     CONF_HOT_WATER_PRICE,
     DOMAIN,
+    ROOM_TYPE_NAMES,
     SERVICE_COLD_WATER,
     SERVICE_HEATING,
     SERVICE_HOT_WATER,
@@ -40,6 +41,15 @@ _DEVICE_INFO_BASE = {
     "model": "eMonitoring",
     "entry_type": "service",
 }
+
+
+def _build_device_info(entry_id: str) -> dict:
+    """Return the shared device-info dict for all Minol sensors."""
+    return {
+        **_DEVICE_INFO_BASE,
+        "identifiers": {(DOMAIN, entry_id)},
+        "name": "Minol Energy",
+    }
 
 
 @dataclass(frozen=True)
@@ -156,6 +166,74 @@ async def async_setup_entry(
 
     async_add_entities(entities)
 
+    # Room-level sensors are added dynamically so they appear even when the
+    # first coordinator refresh returns a period without device-level data
+    # (e.g. the current month is still preliminary).  The listener re-runs
+    # after every coordinator update and adds any new (room_id, service_code)
+    # pairs it finds.
+    rooms_added: set[tuple[str, str]] = set()
+
+    def _add_room_sensors() -> None:
+        if not coordinator.data:
+            _LOGGER.debug("_add_room_sensors: coordinator.data is None, skipping")
+            return
+        device_period = coordinator.data.get("latest_consumption", {})
+        if not device_period:
+            _LOGGER.debug("_add_room_sensors: no consumption period available yet")
+            return
+
+        total_devices = sum(
+            len(cons.get("devices", []))
+            for cons in device_period.get("consumptions", [])
+        )
+        _LOGGER.debug(
+            "_add_room_sensors: scanning period=%s status=%s total_devices=%d rooms_known=%d",
+            device_period.get("period"),
+            device_period.get("statusOverall"),
+            total_devices,
+            len(rooms_added),
+        )
+
+        new_entities: list[SensorEntity] = []
+        for svc in _SERVICES:
+            for cons in device_period.get("consumptions", []):
+                if cons.get("service") != svc.service_code:
+                    continue
+                for device in cons.get("devices", []):
+                    room_id = device.get("room")
+                    if not room_id:
+                        continue
+                    key = (room_id, svc.service_code)
+                    if key not in rooms_added:
+                        rooms_added.add(key)
+                        new_entities.append(
+                            MinolRoomSensor(
+                                coordinator=coordinator,
+                                entry=entry,
+                                service=svc,
+                                room_id=room_id,
+                            )
+                        )
+        if new_entities:
+            _LOGGER.debug(
+                "Adding %d new room sensor(s): %s",
+                len(new_entities),
+                [e.name for e in new_entities],
+            )
+            async_add_entities(new_entities)
+        elif total_devices == 0:
+            _LOGGER.debug(
+                "_add_room_sensors: period %s has no devices — "
+                "room sensors cannot be created. "
+                "Run: uv run pytest tests/test_api_live.py::test_devices_in_get_all_data -v -s",
+                device_period.get("period"),
+            )
+
+    # Run once immediately with the data already in the coordinator, then
+    # re-run after every successful coordinator refresh.
+    _add_room_sensors()
+    entry.async_on_unload(coordinator.async_add_listener(_add_room_sensors))
+
 
 # ---------------------------------------------------------------------------
 # Helper
@@ -208,11 +286,7 @@ class MinolConsumptionSensor(CoordinatorEntity[MinolDataCoordinator], SensorEnti
         self._attr_state_class = state_class
         self._attr_device_class = device_class
         self._attr_icon = icon
-        self._attr_device_info = {
-            **_DEVICE_INFO_BASE,
-            "identifiers": {(DOMAIN, entry.entry_id)},
-            "name": "Minol Energy",
-        }
+        self._attr_device_info = _build_device_info(entry.entry_id)
 
     @property
     def native_value(self) -> float | None:
@@ -253,11 +327,7 @@ class MinolTenantInfoSensor(CoordinatorEntity[MinolDataCoordinator], SensorEntit
         super().__init__(coordinator)
         self._attr_unique_id = f"{entry.entry_id}_tenant_info"
         self._attr_name = "Tenant Info"
-        self._attr_device_info = {
-            **_DEVICE_INFO_BASE,
-            "identifiers": {(DOMAIN, entry.entry_id)},
-            "name": "Minol Energy",
-        }
+        self._attr_device_info = _build_device_info(entry.entry_id)
 
     @property
     def native_value(self) -> str | None:
@@ -315,11 +385,7 @@ class MinolCostSensor(CoordinatorEntity[MinolDataCoordinator], SensorEntity):
         slug = f"{service.service_code}_cost".lower()
         self._attr_unique_id = f"{entry.entry_id}_{slug}"
         self._attr_name = f"{service.type_text} Cost"
-        self._attr_device_info = {
-            **_DEVICE_INFO_BASE,
-            "identifiers": {(DOMAIN, entry.entry_id)},
-            "name": "Minol Energy",
-        }
+        self._attr_device_info = _build_device_info(entry.entry_id)
 
     @property
     def native_value(self) -> float | None:
@@ -334,3 +400,85 @@ class MinolCostSensor(CoordinatorEntity[MinolDataCoordinator], SensorEntity):
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
         return {"price_per_unit": self._price}
+
+
+class MinolRoomSensor(CoordinatorEntity[MinolDataCoordinator], SensorEntity):
+    """Aggregated energy/volume sensor for one room and service type.
+
+    Sums all device readings (e.g. multiple HKV heat cost allocators) for the
+    same room ID and service within the latest consumption period.
+    """
+
+    _attr_has_entity_name = True
+    _attr_suggested_display_precision = 2
+    _attr_state_class = SensorStateClass.TOTAL
+
+    def __init__(
+        self,
+        coordinator: MinolDataCoordinator,
+        entry: MinolConfigEntry,
+        service: _ServiceMeta,
+        room_id: str,
+    ) -> None:
+        super().__init__(coordinator)
+        self._service = service
+        self._room_id = room_id
+
+        room_name = ROOM_TYPE_NAMES.get(room_id) or f"Room {room_id.lstrip('0') or room_id}"
+        slug = f"room_{room_id}_{service.service_code}"
+        self._attr_unique_id = f"{entry.entry_id}_{slug}"
+        self._attr_name = f"{room_name} {service.type_text}"
+        self._attr_native_unit_of_measurement = service.energy_unit
+        self._attr_device_class = service.device_class
+        self._attr_icon = service.icon
+        self._attr_device_info = _build_device_info(entry.entry_id)
+
+    def _device_period(self) -> dict[str, Any]:
+        """Return the latest consumption period (contains device-level data)."""
+        return (self.coordinator.data or {}).get("latest_consumption", {})
+
+    def _get_devices(self) -> list[dict[str, Any]]:
+        """Return all devices for this room + service in the device period."""
+        for cons in self._device_period().get("consumptions", []):
+            if cons.get("service") == self._service.service_code:
+                return [
+                    d for d in cons.get("devices", [])
+                    if d.get("room") == self._room_id
+                ]
+        return []
+
+    @property
+    def native_value(self) -> float | None:
+        devices = self._get_devices()
+        if not devices:
+            return None
+        return sum(float(d.get("energyValue") or 0) for d in devices)
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        latest = self._device_period()
+        devices = self._get_devices()
+        attrs: dict[str, Any] = {
+            "period": latest.get("period"),
+            "room_id": self._room_id,
+            "room_name": ROOM_TYPE_NAMES.get(self._room_id),
+            "device_count": len(devices),
+        }
+        if len(devices) == 1:
+            d = devices[0]
+            attrs["device_id"] = d.get("deviceid")
+            attrs["device_value"] = d.get("deviceValue")
+            attrs["device_unit"] = d.get("deviceUnit")
+            attrs["estimated"] = d.get("estimated")
+            attrs["is_data_missing"] = d.get("isDataMissing")
+        elif len(devices) > 1:
+            attrs["devices"] = [
+                {
+                    "device_id": d.get("deviceid"),
+                    "energy_value": d.get("energyValue"),
+                    "device_value": d.get("deviceValue"),
+                    "estimated": d.get("estimated"),
+                }
+                for d in devices
+            ]
+        return {k: v for k, v in attrs.items() if v is not None}

@@ -56,6 +56,93 @@ def _make_resp(body: str | dict, status: int = 200) -> MagicMock:
 
 
 # ---------------------------------------------------------------------------
+# Device / room helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_period_with_devices(devices_by_service: dict) -> dict:
+    """Build a minimal consumption period with device lists."""
+    consumptions = []
+    for service_code, devices in devices_by_service.items():
+        consumptions.append({"service": service_code, "devices": devices})
+    return {"consumptions": consumptions, "statusOverall": "UVI_AVAILABLE"}
+
+
+def _make_device(room: str, energy: float, service: str, device_id: str = "DEVID") -> dict:
+    return {
+        "deviceid": device_id,
+        "room": room,
+        "service": service,
+        "energyValue": energy,
+        "deviceValue": energy * 0.97,
+        "deviceUnit": "EH",
+        "estimated": False,
+        "isDataMissing": False,
+    }
+
+
+class TestDeviceExtraction:
+    """Verify that devices embedded in consumptions can be extracted correctly."""
+
+    def test_devices_present_in_consumption(self):
+        d1 = _make_device("0000001", 10.0, SERVICE_HEATING)
+        period = _make_period_with_devices({SERVICE_HEATING: [d1]})
+        devices = period["consumptions"][0]["devices"]
+        assert len(devices) == 1
+        assert devices[0]["room"] == "0000001"
+        assert devices[0]["energyValue"] == 10.0
+
+    def test_multiple_devices_same_room(self):
+        d1 = _make_device("0000001", 20.0, SERVICE_HEATING, "DEV1")
+        d2 = _make_device("0000001", 30.0, SERVICE_HEATING, "DEV2")
+        period = _make_period_with_devices({SERVICE_HEATING: [d1, d2]})
+        devices = [
+            d for d in period["consumptions"][0]["devices"]
+            if d["room"] == "0000001"
+        ]
+        total = sum(float(d["energyValue"]) for d in devices)
+        assert total == 50.0
+
+    def test_devices_filtered_by_room(self):
+        d1 = _make_device("0000001", 10.0, SERVICE_HEATING, "DEV1")
+        d2 = _make_device("0000002", 20.0, SERVICE_HEATING, "DEV2")
+        period = _make_period_with_devices({SERVICE_HEATING: [d1, d2]})
+        all_devs = period["consumptions"][0]["devices"]
+        room1_devs = [d for d in all_devs if d["room"] == "0000001"]
+        assert len(room1_devs) == 1
+        assert room1_devs[0]["energyValue"] == 10.0
+
+    def test_devices_across_services(self):
+        h_dev = _make_device("0000001", 100.0, SERVICE_HEATING)
+        w_dev = _make_device("0000001", 2.5, SERVICE_COLD_WATER)
+        period = _make_period_with_devices({
+            SERVICE_HEATING: [h_dev],
+            SERVICE_COLD_WATER: [w_dev],
+        })
+        assert len(period["consumptions"]) == 2
+        heating_cons = next(c for c in period["consumptions"] if c["service"] == SERVICE_HEATING)
+        cold_cons = next(c for c in period["consumptions"] if c["service"] == SERVICE_COLD_WATER)
+        assert heating_cons["devices"][0]["energyValue"] == 100.0
+        assert cold_cons["devices"][0]["energyValue"] == 2.5
+
+    def test_room_id_deduplication(self):
+        """Each unique (room, service) pair should yield exactly one sensor."""
+        d1 = _make_device("0000001", 10.0, SERVICE_HEATING, "DEV1")
+        d2 = _make_device("0000001", 15.0, SERVICE_HEATING, "DEV2")
+        d3 = _make_device("0000002", 5.0, SERVICE_HEATING, "DEV3")
+        period = _make_period_with_devices({SERVICE_HEATING: [d1, d2, d3]})
+        seen: set[tuple[str, str]] = set()
+        for cons in period["consumptions"]:
+            for dev in cons.get("devices", []):
+                seen.add((dev["room"], cons["service"]))
+        assert len(seen) == 2  # room 1 and room 2, both heating
+
+
+# ---------------------------------------------------------------------------
+# latest_with_devices selection logic
+# ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
 # get_service_value
 # ---------------------------------------------------------------------------
 

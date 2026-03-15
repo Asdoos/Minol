@@ -31,30 +31,14 @@ from urllib.parse import parse_qs, urlencode, urlparse
 
 import aiohttp
 
-# ---------------------------------------------------------------------------
-# B2C config (mirroring const.py)
-# ---------------------------------------------------------------------------
-
-B2C_AUTH_URL = (
-    "https://minolauth.b2clogin.com/tfp/"
-    "minolauth.onmicrosoft.com/"
-    "B2C_1A_SEAMLESS_MIGRATION_AND_GROUPS/oauth2/v2.0/authorize"
+from custom_components.minol_energy.const import (
+    B2C_AUTH_URL,
+    B2C_CLIENT_ID,
+    B2C_CLIENT_SECRET,
+    B2C_REDIRECT_URI,
+    B2C_SCOPES,
+    B2C_TOKEN_URL,
 )
-B2C_TOKEN_URL = (
-    "https://minolauth.b2clogin.com/tfp/"
-    "minolauth.onmicrosoft.com/"
-    "B2C_1A_SEAMLESS_MIGRATION_AND_GROUPS/oauth2/v2.0/token"
-)
-B2C_CLIENT_ID = "b751cea9-de3f-498b-9dcf-33a22a28d578"
-B2C_REDIRECT_URI = "https://oauth.pstmn.io/v1/callback"
-B2C_CLIENT_SECRET = "uKy8Q~r0FdaYeCotNNT0390HW2yoN-rk7srD1cbR"
-B2C_SCOPES = " ".join([
-    "openid",
-    "profile",
-    "offline_access",
-    "https://minolauth.onmicrosoft.com/"
-    "e7cf3202-37a5-4b92-aae1-9e4f675ad9ed/access_as_user",
-])
 
 
 def _generate_pkce() -> tuple[str, str]:

@@ -46,6 +46,7 @@ from .const import (
     B2C_REDIRECT_URI,
     B2C_SCOPES,
     B2C_TOKEN_URL,
+    STATUS_UVI_AVAILABLE,
     USER_AGENT,
 )
 
@@ -432,14 +433,13 @@ class MinolApiClient:
         )
 
         now = datetime.now(timezone.utc)
-        start_month = now.replace(day=1)
-        if start_month.month <= 3:
-            startdate = start_month.replace(
-                year=start_month.year - 1,
-                month=start_month.month + 9,
-            )
-        else:
-            startdate = start_month.replace(month=start_month.month - 3)
+        # Fetch the last 3 months to cover the current and previous billing month.
+        _m = now.month - 3
+        _y = now.year
+        if _m <= 0:
+            _m += 12
+            _y -= 1
+        startdate = now.replace(year=_y, month=_m, day=1)
 
         consumptions = await self.get_consumptions(
             billing_unit_id,
@@ -454,9 +454,11 @@ class MinolApiClient:
             len(consumptions),
         )
 
-        latest = {}
+        # Most recent finalised period; fall back to the last period if none is
+        # finalised yet (e.g. the current month is still preliminary).
+        latest: dict[str, Any] = {}
         for period in reversed(consumptions):
-            if period.get("statusOverall") == "UVI_AVAILABLE" and period.get(
+            if period.get("statusOverall") == STATUS_UVI_AVAILABLE and period.get(
                 "consumptions"
             ):
                 latest = period

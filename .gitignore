@@ -15,3 +15,5 @@ __pycache__/
 
 # APK analysis artifacts
 debug/
+*.apk
+*.xapk
