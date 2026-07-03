@@ -63,6 +63,7 @@ class _ServiceMeta:
     service_unit: str  # raw meter unit shown in attributes
     device_class: SensorDeviceClass | None
     translation_key: str       # main consumption sensor
+    total_translation_key: str  # energy-dashboard-compatible total_increasing sensor
     co2_translation_key: str   # CO₂ sensor ("" for cold water)
     cost_translation_key: str  # cost sensor
 
@@ -77,6 +78,7 @@ _SERVICES: list[_ServiceMeta] = [
         service_unit="EH",
         device_class=SensorDeviceClass.ENERGY,
         translation_key="heating_latest_month",
+        total_translation_key="heating_energy_total",
         co2_translation_key="heating_co2_latest_month",
         cost_translation_key="heating_cost",
     ),
@@ -89,6 +91,7 @@ _SERVICES: list[_ServiceMeta] = [
         service_unit="m³",
         device_class=SensorDeviceClass.ENERGY,
         translation_key="hot_water_latest_month",
+        total_translation_key="hot_water_energy_total",
         co2_translation_key="hot_water_co2_latest_month",
         cost_translation_key="hot_water_cost",
     ),
@@ -101,6 +104,7 @@ _SERVICES: list[_ServiceMeta] = [
         service_unit="m³",
         device_class=SensorDeviceClass.WATER,
         translation_key="cold_water_latest_month",
+        total_translation_key="cold_water_energy_total",
         co2_translation_key="",
         cost_translation_key="cold_water_cost",
     ),
@@ -153,6 +157,24 @@ async def async_setup_entry(
                 translation_key=svc.translation_key,
                 unit=svc.energy_unit,
                 state_class=SensorStateClass.TOTAL,
+                device_class=svc.device_class,
+                icon=svc.icon,
+            )
+        )
+        # Energy-Dashboard-compatible total: same value as *_latest_month, but
+        # with state_class total_increasing so HA's statistics engine treats
+        # the periodic reset to a lower value at the start of each billing
+        # period as a meter reset rather than negative consumption.
+        entities.append(
+            MinolConsumptionSensor(
+                coordinator=coordinator,
+                entry=entry,
+                service=svc,
+                field="energyValue",
+                suffix="energy_total",
+                translation_key=svc.total_translation_key,
+                unit=svc.energy_unit,
+                state_class=SensorStateClass.TOTAL_INCREASING,
                 device_class=svc.device_class,
                 icon=svc.icon,
             )
