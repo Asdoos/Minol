@@ -240,8 +240,8 @@ class TestRefreshAccessToken:
         session = MagicMock()
         session.post = MagicMock(return_value=_make_resp(token_response, status=200))
 
-        refreshed: list[tuple[str, str | None]] = []
-        client._on_tokens_refreshed = lambda a, r: refreshed.append((a, r))
+        refreshed: list[tuple[str, str | None, int]] = []
+        client._on_tokens_refreshed = lambda a, r, exp: refreshed.append((a, r, exp))
 
         with patch.object(client, "_ensure_session", return_value=session):
             result = await client._refresh_access_token()
@@ -249,7 +249,7 @@ class TestRefreshAccessToken:
         assert result is True
         assert client._access_token == "new_access"
         assert client._refresh_token == "new_refresh"
-        assert refreshed == [("new_access", "new_refresh")]
+        assert refreshed == [("new_access", "new_refresh", 3600)]
 
     async def test_failed_refresh_returns_false(self):
         client = MinolApiClient(access_token="old", refresh_token="refresh_tok")

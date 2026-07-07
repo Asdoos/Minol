@@ -81,7 +81,7 @@ class MinolApiClient:
         client = MinolApiClient(
             access_token="eyJ...",
             refresh_token="0.A...",
-            on_tokens_refreshed=lambda a, r: save_tokens(a, r),
+            on_tokens_refreshed=lambda a, r, exp: save_tokens(a, r, exp),
         )
         data = await client.get_all_data()
         await client.close()
@@ -91,7 +91,7 @@ class MinolApiClient:
         self,
         access_token: str,
         refresh_token: str | None = None,
-        on_tokens_refreshed: Callable[[str, str | None], None] | None = None,
+        on_tokens_refreshed: Callable[[str, str | None, int], None] | None = None,
     ) -> None:
         self._access_token = access_token
         self._refresh_token = refresh_token
@@ -193,7 +193,9 @@ class MinolApiClient:
                     "Token refreshed successfully (expires_in=%s s)", expires_in
                 )
                 if self._on_tokens_refreshed:
-                    self._on_tokens_refreshed(self._access_token, self._refresh_token)
+                    self._on_tokens_refreshed(
+                        self._access_token, self._refresh_token, int(expires_in)
+                    )
                 return True
 
         except aiohttp.ClientError as err:

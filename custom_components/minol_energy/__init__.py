@@ -21,14 +21,20 @@ type MinolConfigEntry = ConfigEntry[MinolDataCoordinator]
 async def async_setup_entry(hass: HomeAssistant, entry: MinolConfigEntry) -> bool:
     """Set up Minol Energy from a config entry."""
 
-    def _on_tokens_refreshed(access_token: str, refresh_token: str | None) -> None:
+    def _on_tokens_refreshed(
+        access_token: str, refresh_token: str | None, expires_in: int
+    ) -> None:
         """Persist refreshed tokens back to the config entry.
 
         Uses async_update_entry(data=…) which fires add_update_listener callbacks.
         The listener below guards against that by comparing entry.options.
         """
         _LOGGER.debug("Persisting refreshed tokens to config entry")
-        new_data = {**entry.data, CONF_ACCESS_TOKEN: access_token, "token_expires_in": 3600}
+        new_data = {
+            **entry.data,
+            CONF_ACCESS_TOKEN: access_token,
+            "token_expires_in": expires_in,
+        }
         if refresh_token:
             new_data[CONF_REFRESH_TOKEN] = refresh_token
         hass.config_entries.async_update_entry(entry, data=new_data)

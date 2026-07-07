@@ -384,12 +384,12 @@ async def test_token_refresh() -> None:
     if not _REFRESH_TOKEN:
         pytest.skip("MINOL_REFRESH_TOKEN not set")
 
-    refreshed: list[tuple[str, str | None]] = []
+    refreshed: list[tuple[str, str | None, int]] = []
 
     client = MinolApiClient(
         access_token=_ACCESS_TOKEN,
         refresh_token=_REFRESH_TOKEN,
-        on_tokens_refreshed=lambda a, r: refreshed.append((a, r)),
+        on_tokens_refreshed=lambda a, r, exp: refreshed.append((a, r, exp)),
     )
     try:
         # Force a "token expired" scenario by corrupting the access token
