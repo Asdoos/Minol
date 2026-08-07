@@ -109,9 +109,11 @@ class TestAsyncImportHistory:
         assert meta["unit_of_measurement"] == "kWh"
         assert stats[-1]["sum"] == 830.0
 
-        assert by_id["minol_energy:cold_water_volume"][0][
-            "unit_of_measurement"
-        ] == "m³"
+        assert meta["unit_class"] == "energy"
+
+        cold, _ = by_id["minol_energy:cold_water_volume"]
+        assert cold["unit_of_measurement"] == "m³"
+        assert cold["unit_class"] == "volume"
 
     def test_repeated_import_is_stable(self):
         """Rows are keyed by start time — re-importing must not shift the sums."""
@@ -139,3 +141,13 @@ class TestAsyncImportHistory:
         assert "mean_type" not in meta
         assert meta["has_mean"] is False
         assert meta["has_sum"] is True
+
+    def test_metadata_on_ha_without_unit_class(self, monkeypatch):
+        """HA < 2025.11 rejects unknown metadata keys — must not be sent there."""
+        models = sys.modules["homeassistant.components.recorder.models"]
+        monkeypatch.setattr(models.StatisticMetaData, "__annotations__", {})
+
+        async_import_history(_FakeHass, _PERIODS)
+        meta, _ = conftest.IMPORTED_STATISTICS[0]
+        assert "unit_class" not in meta
+        assert meta["unit_of_measurement"] == "kWh"

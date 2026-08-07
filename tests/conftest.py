@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import sys
 from enum import StrEnum
+from typing import TypedDict
 from unittest.mock import MagicMock
 
 # Register stubs for every homeassistant namespace touched by the package
@@ -135,9 +136,23 @@ class StatisticMeanType(StrEnum):
 
 IMPORTED_STATISTICS: list[tuple[dict, list[dict]]] = []
 
+
+class StatisticMetaData(TypedDict):
+    """Shape of HA ≥ 2025.11 — statistics.py probes it for optional keys."""
+
+    has_mean: bool
+    mean_type: StatisticMeanType
+    has_sum: bool
+    name: str | None
+    source: str
+    statistic_id: str
+    unit_class: str | None
+    unit_of_measurement: str | None
+
+
 _models = sys.modules["homeassistant.components.recorder.models"]
 _models.StatisticData = dict
-_models.StatisticMetaData = dict
+_models.StatisticMetaData = StatisticMetaData
 _models.StatisticMeanType = StatisticMeanType
 
 sys.modules["homeassistant.components.recorder.statistics"].async_add_external_statistics = (

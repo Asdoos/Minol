@@ -21,7 +21,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
-from homeassistant.components.recorder.models import StatisticData
+from homeassistant.components.recorder.models import StatisticData, StatisticMetaData
 from homeassistant.components.recorder.statistics import async_add_external_statistics
 from homeassistant.const import UnitOfEnergy, UnitOfVolume
 from homeassistant.core import HomeAssistant, callback
@@ -37,28 +37,43 @@ from .const import (
 
 _LOGGER = logging.getLogger(__name__)
 
-# service code → (statistic_id suffix, display name, unit)
-_SERIES: dict[str, tuple[str, str, str]] = {
+# unit_class values are HA's unit converter classes (BaseUnitConverter.UNIT_CLASS);
+# hardcoded rather than imported so the module keeps depending on recorder only.
+_ENERGY = "energy"
+_VOLUME = "volume"
+
+# service code → (statistic_id suffix, display name, unit, unit_class)
+_SERIES: dict[str, tuple[str, str, str, str]] = {
     SERVICE_HEATING: (
         "heating_energy",
         "Minol Heating",
         UnitOfEnergy.KILO_WATT_HOUR,
+        _ENERGY,
     ),
     SERVICE_HOT_WATER: (
         "hot_water_energy",
         "Minol Hot Water",
         UnitOfEnergy.KILO_WATT_HOUR,
+        _ENERGY,
     ),
     SERVICE_COLD_WATER: (
         "cold_water_volume",
         "Minol Cold Water",
         UnitOfVolume.CUBIC_METERS,
+        _VOLUME,
     ),
 }
 
 
-def _metadata(statistic_id: str, name: str, unit: str) -> dict[str, Any]:
-    """Build recorder metadata, tolerating the has_mean → mean_type rename."""
+def _metadata(
+    statistic_id: str, name: str, unit: str, unit_class: str
+) -> dict[str, Any]:
+    """Build recorder metadata, tolerating fields HA added after 2024.1.
+
+    Keys the running HA doesn't know are not merely ignored — the recorder does
+    ``StatisticsMeta(**metadata)``, so an unexpected one raises — hence the
+    probes instead of just always sending the newest shape.
+    """
     meta: dict[str, Any] = {
         "has_mean": False,
         "has_sum": True,
@@ -67,6 +82,8 @@ def _metadata(statistic_id: str, name: str, unit: str) -> dict[str, Any]:
         "statistic_id": statistic_id,
         "unit_of_measurement": unit,
     }
+    if "unit_class" in getattr(StatisticMetaData, "__annotations__", ()):
+        meta["unit_class"] = unit_class  # HA ≥ 2025.11
     try:
         from homeassistant.components.recorder.models import StatisticMeanType
     except ImportError:
@@ -119,12 +136,14 @@ def async_import_history(hass: HomeAssistant, periods: list[dict[str, Any]]) -> 
         _LOGGER.debug("Recorder not enabled — skipping statistics import")
         return
 
-    for service_code, (suffix, name, unit) in _SERIES.items():
+    for service_code, (suffix, name, unit, unit_class) in _SERIES.items():
         stats = build_statistics(periods, service_code)
         if not stats:
             continue
         statistic_id = f"{DOMAIN}:{suffix}"
-        async_add_external_statistics(hass, _metadata(statistic_id, name, unit), stats)
+        async_add_external_statistics(
+            hass, _metadata(statistic_id, name, unit, unit_class), stats
+        )
         _LOGGER.debug(
             "Imported %d periods into %s (total %.3f %s)",
             len(stats),
