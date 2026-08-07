@@ -8,6 +8,7 @@ one entry per service type (100=Heating, 200=Hot Water, 300=Cold Water).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime
 import logging
 from typing import Any
 
@@ -22,6 +23,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from . import MinolConfigEntry
+from .api import MinolApiClient
 from .const import (
     CONF_COLD_WATER_PRICE,
     CONF_HEATING_PRICE,
@@ -162,9 +164,10 @@ async def async_setup_entry(
             )
         )
         # Energy-Dashboard-compatible total: same value as *_latest_month, but
-        # with state_class total_increasing so HA's statistics engine treats
-        # the periodic reset to a lower value at the start of each billing
-        # period as a meter reset rather than negative consumption.
+        # kept as a separate entity so existing dashboard configs keep working.
+        # state_class TOTAL together with last_reset (see
+        # MinolConsumptionSensor.last_reset) is what makes HA add each new
+        # billing period's value to the long-term sum in full.
         entities.append(
             MinolConsumptionSensor(
                 coordinator=coordinator,
@@ -174,7 +177,7 @@ async def async_setup_entry(
                 suffix="energy_total",
                 translation_key=svc.total_translation_key,
                 unit=svc.energy_unit,
-                state_class=SensorStateClass.TOTAL_INCREASING,
+                state_class=SensorStateClass.TOTAL,
                 device_class=svc.device_class,
                 icon=svc.icon,
             )
@@ -341,6 +344,23 @@ class MinolConsumptionSensor(CoordinatorEntity[MinolDataCoordinator], SensorEnti
         return float(val) if val is not None else None
 
     @property
+    def last_reset(self) -> datetime | None:
+        """Start of the billing period the current value accumulates from.
+
+        The API reports consumption *per period*, so the value drops back at
+        every period boundary.  Without last_reset, HA's statistics engine only
+        adds the *increase* over the previous period's value — a month of
+        250 kWh following one of 300 kWh would contribute 0 to the total.
+        A changed last_reset tells HA the counter restarted, so the whole new
+        period value is added to the long-term sum.
+        """
+        if self.state_class is not SensorStateClass.TOTAL:
+            return None  # CO₂ sensor is a measurement — last_reset is invalid there
+        return MinolApiClient.get_period_start(
+            self.coordinator.data.get("latest_consumption", {})
+        )
+
+    @property
     def extra_state_attributes(self) -> dict[str, Any]:
         latest = self.coordinator.data.get("latest_consumption", {})
         cons = _get_consumption_entry(
@@ -500,6 +520,11 @@ class MinolRoomSensor(CoordinatorEntity[MinolDataCoordinator], SensorEntity):
         if not devices:
             return None
         return sum(float(d.get("energyValue") or 0) for d in devices)
+
+    @property
+    def last_reset(self) -> datetime | None:
+        """Start of the billing period — see MinolConsumptionSensor.last_reset."""
+        return MinolApiClient.get_period_start(self._device_period())
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:

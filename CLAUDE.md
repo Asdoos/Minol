@@ -45,7 +45,16 @@ __init__.py        Entry setup/teardown. Creates MinolApiClient with stored OAut
 coordinator.py     MinolDataCoordinator (DataUpdateCoordinator). Calls
                    client.get_all_data() on every poll, maps MinolAuthError →
                    ConfigEntryAuthFailed (triggers HA reauth flow) and
-                   MinolConnectionError → UpdateFailed.
+                   MinolConnectionError → UpdateFailed. Also feeds every period
+                   to statistics.async_import_history(); failures there are
+                   logged, never propagated (they would kill all sensors).
+
+statistics.py      Imports the whole consumption history as *external* long-term
+                   statistics (minol_energy:heating_energy, :hot_water_energy,
+                   :cold_water_volume) so the Energy Dashboard shows data from
+                   before the integration was installed. Re-imports everything
+                   on every poll — rows are keyed by start time, so months are
+                   updated instead of duplicated.
 
 api.py             MinolApiClient — the only file that makes HTTP requests.
                    Takes OAuth2 tokens (access_token, refresh_token) obtained via
@@ -104,3 +113,16 @@ Consumption periods contain a `consumptions` list, one entry per service code:
 - `"300"` = Cold Water (KALTWASSER)
 
 Each entry has `energyValue` (kWh or m³), `serviceValue` (raw meter unit), `co2kg`, `estimated`, etc.
+
+A period dict has exactly these keys: `period`, `statusOverall`, `consumptions`,
+`benchmarks`, `normalisedBenchmarks` — there is **no** start/end date field.
+
+`period` labels one calendar month, but the two endpoints disagree on how:
+- `/consumptions` → its **last** day, full ISO: `"2026-07-31T00:00:00Z"` = July
+- `/consumptions/availableData` → its **first** day, date only: `"2023-07-01"`
+
+Values are per month, not cumulative meter readings, so every sensor needs
+`state_class: total` plus `last_reset` (`MinolApiClient.get_period_start()`,
+which normalises both formats to the 1st of the month). With `total_increasing`
+HA only adds the *increase* over the previous month and silently drops ~45 % of
+the consumption — see the 0.7.2 fix.

@@ -16,7 +16,7 @@ Tokens are refreshed silently in the background — you only need to log in once
 
 ## Features
 
-- **Energy Dashboard compatible** — dedicated `*_energy_total` sensors use `TOTAL_INCREASING` and can be added to the HA Energy Dashboard
+- **Energy Dashboard compatible** — dedicated `*_energy_total` sensors carry `last_reset`, so period totals add up correctly in long-term statistics
 - **Heating, hot water, and cold water** sensors with kWh and volume values
 - **CO₂ tracking** — carbon intensity sensor for heating and hot water
 - **Cost estimation** — configure energy prices to see estimated monthly costs
@@ -34,25 +34,49 @@ For each service type available on your account (heating, hot water, cold water)
 
 | Sensor | Unit | State class | Description |
 |---|---|---|---|
-| Heating Latest Month | kWh | `total` | Month-to-date energy consumption; resets to a low value at the start of each billing period |
-| Heating Total | kWh | `total_increasing` | Same value as *Heating Latest Month*, but flagged as a periodically-resetting counter — use this one as the source in the Energy Dashboard |
+| Heating Latest Month | kWh | `total` | Consumption of the latest billing period; resets to a low value when a new period starts |
+| Heating Total | kWh | `total` | Same value as *Heating Latest Month* — use this one as the source in the Energy Dashboard |
 | Heating CO₂ Latest Month | kg | `measurement` | CO₂ equivalent for heating |
-| Hot Water Latest Month | kWh | `total` | Month-to-date hot water energy consumption |
-| Hot Water Total | kWh | `total_increasing` | Energy-Dashboard-compatible version of *Hot Water Latest Month* |
+| Hot Water Latest Month | kWh | `total` | Hot water energy consumption of the latest billing period |
+| Hot Water Total | kWh | `total` | Energy-Dashboard source for hot water |
 | Hot Water CO₂ Latest Month | kg | `measurement` | CO₂ equivalent for hot water |
-| Cold Water Latest Month | m³ | `total` | Month-to-date cold water volume consumption |
-| Cold Water Total | m³ | `total_increasing` | Energy-Dashboard-compatible version of *Cold Water Latest Month* |
+| Cold Water Latest Month | m³ | `total` | Cold water volume consumption of the latest billing period |
+| Cold Water Total | m³ | `total` | Energy-Dashboard source for cold water |
 
 Which sensors appear depends on which services your property has metered.
 Cost sensors are created automatically when a non-zero price is set in Options.
 
-The `*_latest_month` sensors reset to a low value at the start of each billing period
-by design (they show month-to-date consumption). Because they use `state_class: total`,
-the HA Energy Dashboard would misinterpret that reset as negative consumption — **use the
-`*_energy_total` sensors as your Energy Dashboard source instead.** Those use
-`state_class: total_increasing`, which tells Home Assistant's statistics engine to treat
-the periodic drop as a counter reset (the same pattern HA uses for daily/weekly resetting
-utility sensors), so no negative consumption ever shows up.
+All consumption sensors report the value of a **whole billing period**, so the state drops
+back at every period boundary. They therefore expose `last_reset` (the start of the period)
+alongside `state_class: total`. That is what makes Home Assistant's statistics engine add
+each new period's value to the long-term sum *in full* instead of only its increase over
+the previous period — a 250 kWh month following a 300 kWh one would otherwise contribute
+nothing to the total.
+
+### Full history in the Energy Dashboard
+
+The API keeps every monthly period since move-in, so the integration imports all of them
+as **long-term statistics** on each refresh — your Energy Dashboard starts at your move-in
+month, not at the day you installed this integration:
+
+| Statistic | Unit |
+|---|---|
+| `minol_energy:heating_energy` | kWh |
+| `minol_energy:hot_water_energy` | kWh |
+| `minol_energy:cold_water_volume` | m³ |
+
+Pick these in *Settings → Dashboards → Energy* (they appear in the source picker next to
+regular entities). They are statistics only — no entity, no current state — and are the
+better dashboard source than the `*_energy_total` sensors, which can only record what
+happened while Home Assistant was running. Each month lands on the 1st at 00:00 UTC as a
+single bucket, because monthly totals are all the API reports. Remove them again under
+*Developer tools → Statistics* if you don't want them.
+
+> **Upgrading from 0.7.x:** the `*_energy_total` sensors used `total_increasing` there,
+> which silently under-counted whenever a period was larger than the one before it.
+> Replayed against 19 months of real data this lost 43 % of the heating energy,
+> 48 % of the hot water and 53 % of the cold water. Long-term statistics recorded
+> under 0.7.x are wrong and can be corrected in *Developer tools → Statistics*.
 
 ---
 

@@ -16,6 +16,7 @@ from homeassistant.helpers.update_coordinator import (
 
 from .api import MinolApiClient, MinolAuthError, MinolConnectionError
 from .const import CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL, DOMAIN
+from .statistics import async_import_history
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -47,12 +48,21 @@ class MinolDataCoordinator(DataUpdateCoordinator[dict[str, Any]]):
             data = await self.client.get_all_data()
             _LOGGER.debug(
                 "Data refresh complete: billingUnit=%s residentialUnit=%s"
-                " availablePeriods=%d latestPeriod=%s",
+                " availablePeriods=%d periods=%d latestPeriod=%s",
                 data.get("billing_unit_id"),
                 data.get("residential_unit_id"),
                 len(data.get("available_periods", [])),
+                len(data.get("consumptions", [])),
                 data.get("latest_consumption", {}).get("period"),
             )
+            # Backfill the Energy Dashboard with every period the API knows,
+            # not just the ones seen since the integration was installed.
+            try:
+                async_import_history(self.hass, data.get("consumptions", []))
+            except Exception:
+                # Statistics are a bonus — never fail the refresh over them,
+                # that would take every sensor unavailable with it.
+                _LOGGER.exception("Long-term statistics import failed")
             return data
         except MinolAuthError as err:
             _LOGGER.warning(

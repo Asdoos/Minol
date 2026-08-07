@@ -193,9 +193,19 @@ class MinolApiClient:
                     "Token refreshed successfully (expires_in=%s s)", expires_in
                 )
                 if self._on_tokens_refreshed:
-                    self._on_tokens_refreshed(
-                        self._access_token, self._refresh_token, int(expires_in)
-                    )
+                    try:
+                        self._on_tokens_refreshed(
+                            self._access_token, self._refresh_token, int(expires_in)
+                        )
+                    except Exception:
+                        # B2C has already rotated the refresh token — the old one is
+                        # dead. Reporting failure here would send us back to the
+                        # consumed token on the next reload and brick auth for good.
+                        _LOGGER.exception(
+                            "Refreshed tokens could not be persisted."
+                            " Auth stays alive in memory, but a restart before the"
+                            " next successful refresh will require re-authentication."
+                        )
                 return True
 
         except aiohttp.ClientError as err:
@@ -406,6 +416,7 @@ class MinolApiClient:
           - ``residential_unit_id``: str
           - ``masterdata``: masterdata response dict
           - ``latest_consumption``: the most recent consumption period dict
+          - ``consumptions``: every consumption period the account has
           - ``available_periods``: list of available period dicts
         """
         profiles = await self.get_profiles()
@@ -435,18 +446,25 @@ class MinolApiClient:
         )
 
         now = datetime.now(timezone.utc)
-        # Fetch the last 3 months to cover the current and previous billing month.
-        _m = now.month - 3
-        _y = now.year
-        if _m <= 0:
-            _m += 12
-            _y -= 1
-        startdate = now.replace(year=_y, month=_m, day=1)
+        # Fetch the whole history, not just the recent months: it is the same
+        # single request (~140 KiB for 3 years) and the long-term statistics
+        # import needs every period.  availableData is not sorted, so take its
+        # earliest entry; without it fall back to a 3-month window.
+        known = [str(p["period"])[:10] for p in available_periods if p.get("period")]
+        if known:
+            startdate = min(known)
+        else:
+            _m = now.month - 3
+            _y = now.year
+            if _m <= 0:
+                _m += 12
+                _y -= 1
+            startdate = now.replace(year=_y, month=_m, day=1).strftime("%Y-%m-%d")
 
         consumptions = await self.get_consumptions(
             billing_unit_id,
             residential_unit_id,
-            startdate=startdate.strftime("%Y-%m-%d"),
+            startdate=startdate,
             enddate=now.strftime("%Y-%m-%d"),
         )
 
@@ -484,6 +502,7 @@ class MinolApiClient:
             "residential_unit_id": residential_unit_id,
             "masterdata": masterdata,
             "latest_consumption": latest,
+            "consumptions": consumptions,
             "available_periods": available_periods,
         }
 
@@ -510,3 +529,26 @@ class MinolApiClient:
                 if val is not None:
                     return float(val)
         return None
+
+    @staticmethod
+    def get_period_start(consumption_period: dict[str, Any]) -> datetime | None:
+        """Return the start of a consumption period as an aware UTC datetime.
+
+        Used as the sensors' ``last_reset``: values are reported *per month*, so
+        they drop back to a low number at every period boundary.
+
+        The two endpoints label the same month differently — ``/consumptions``
+        by its last day (``"2026-07-31T00:00:00Z"`` is July), ``availableData``
+        by its first (``"2023-07-01"``) — so only year and month are read and
+        the result is always the 1st.
+        ponytail: assumes one period per calendar month, which is what the API
+        delivers; two readings in one month would share a last_reset.
+        """
+        raw = consumption_period.get("period")
+        if not isinstance(raw, str):
+            return None
+        parts = raw.strip().split("-")
+        try:
+            return datetime(int(parts[0]), int(parts[1]), 1, tzinfo=timezone.utc)
+        except (IndexError, ValueError):
+            return None

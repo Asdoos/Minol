@@ -191,6 +191,50 @@ class TestGetServiceValue:
 
 
 # ---------------------------------------------------------------------------
+# get_period_start (drives the sensors' last_reset)
+# ---------------------------------------------------------------------------
+
+
+class TestGetPeriodStart:
+    def test_consumptions_format_is_month_end(self):
+        """/consumptions labels the month by its last day — July, not August."""
+        period = {"period": "2026-07-31T00:00:00Z"}
+        assert MinolApiClient.get_period_start(period) == datetime(
+            2026, 7, 1, tzinfo=timezone.utc
+        )
+
+    def test_february_month_end(self):
+        period = {"period": "2026-02-28T00:00:00Z"}
+        assert MinolApiClient.get_period_start(period) == datetime(
+            2026, 2, 1, tzinfo=timezone.utc
+        )
+
+    def test_available_data_format_is_month_start(self):
+        """availableData uses the first of the month instead."""
+        assert MinolApiClient.get_period_start({"period": "2023-07-01"}) == datetime(
+            2023, 7, 1, tzinfo=timezone.utc
+        )
+
+    def test_bare_month(self):
+        assert MinolApiClient.get_period_start({"period": "2026-02"}) == datetime(
+            2026, 2, 1, tzinfo=timezone.utc
+        )
+
+    def test_new_period_yields_new_reset(self):
+        """A period change must move last_reset, or HA won't count the new period."""
+        assert MinolApiClient.get_period_start(
+            {"period": "2026-02-28T00:00:00Z"}
+        ) != MinolApiClient.get_period_start({"period": "2026-03-31T00:00:00Z"})
+
+    def test_unparseable_returns_none(self):
+        for raw in ("", "Februar 2026", "2026", None, 202602):
+            assert MinolApiClient.get_period_start({"period": raw}) is None
+
+    def test_missing_period_returns_none(self):
+        assert MinolApiClient.get_period_start({}) is None
+
+
+# ---------------------------------------------------------------------------
 # Token expiry helpers
 # ---------------------------------------------------------------------------
 
@@ -263,6 +307,31 @@ class TestRefreshAccessToken:
 
         assert result is False
         assert client._access_token == "old"
+
+    async def test_persist_failure_still_reports_success(self):
+        """B2C rotated the token — a persistence error must not report failure,
+        or the next reload falls back to the consumed refresh token."""
+        client = MinolApiClient(access_token="old", refresh_token="refresh_tok")
+
+        token_response = {
+            "access_token": "new_access",
+            "refresh_token": "new_refresh",
+            "expires_in": 3600,
+        }
+        session = MagicMock()
+        session.post = MagicMock(return_value=_make_resp(token_response, status=200))
+
+        def _boom(a, r, exp):
+            raise RuntimeError("config entry write failed")
+
+        client._on_tokens_refreshed = _boom
+
+        with patch.object(client, "_ensure_session", return_value=session):
+            result = await client._refresh_access_token()
+
+        assert result is True
+        assert client._access_token == "new_access"
+        assert client._refresh_token == "new_refresh"
 
     async def test_missing_access_token_in_response_returns_false(self):
         client = MinolApiClient(access_token="old", refresh_token="rt")

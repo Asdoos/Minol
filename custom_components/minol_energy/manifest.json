@@ -1,6 +1,7 @@
 {
   "domain": "minol_energy",
   "name": "Minol Energy",
+  "after_dependencies": ["recorder"],
   "codeowners": ["@Asdoos"],
   "config_flow": true,
   "documentation": "https://github.com/Asdoos/Minol",
@@ -9,5 +10,5 @@
   "loggers": ["custom_components.minol_energy"],
   "requirements": [],
   "single_config_entry": true,
-  "version": "0.7.1"
+  "version": "0.8.0"
 }
