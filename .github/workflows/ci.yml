@@ -9,9 +9,22 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
       - run: pip install ruff
       - run: ruff check custom_components/
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      # No homeassistant install needed — tests/conftest.py stubs it out.
+      # aiohttp is the integration's only real dependency (api.py imports it).
+      # The live tests skip themselves because GitHub sets CI=true.
+      - run: pip install pytest pytest-asyncio aiohttp
+      - run: python -m pytest tests/ -v

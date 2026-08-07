@@ -180,7 +180,7 @@ async def test_devices_in_get_all_data() -> None:
         # --- get_all_data() path (3-month window) ---
         data = await client.get_all_data()
         latest = data["latest_consumption"]
-        print(f"\n=== get_all_data() latest period ===")
+        print("\n=== get_all_data() latest period ===")
         print(f"Period : {latest.get('period')}")
         print(f"Status : {latest.get('statusOverall')}")
         has_devices = False
@@ -372,7 +372,7 @@ async def test_explore_room_name_endpoints2() -> None:
             params={"startdate": start, "enddate": end, "includeRooms": "true"},
         )
         if result_with_rooms and isinstance(result_with_rooms, list):
-            print(f"\nconsumptions?includeRooms=true keys sample:")
+            print("\nconsumptions?includeRooms=true keys sample:")
             print(json.dumps(result_with_rooms[-1], indent=2, ensure_ascii=False)[:400])
     finally:
         await client.close()

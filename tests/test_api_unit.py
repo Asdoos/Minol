@@ -10,9 +10,8 @@ import json
 from datetime import datetime, timedelta, timezone
 from unittest.mock import MagicMock, patch
 
-import pytest
 
-from custom_components.minol_energy.api import MinolApiClient, MinolAuthError
+from custom_components.minol_energy.api import MinolApiClient
 from custom_components.minol_energy.config_flow import (
     _compute_code_challenge,
     _extract_code_from_url,
