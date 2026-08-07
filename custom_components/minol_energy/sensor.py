@@ -36,6 +36,7 @@ from .const import (
     SERVICE_HOT_WATER,
 )
 from .coordinator import MinolDataCoordinator
+from .statistics import build_statistics
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -163,13 +164,10 @@ async def async_setup_entry(
                 icon=svc.icon,
             )
         )
-        # Energy-Dashboard-compatible total: same value as *_latest_month, but
-        # kept as a separate entity so existing dashboard configs keep working.
-        # state_class TOTAL together with last_reset (see
-        # MinolConsumptionSensor.last_reset) is what makes HA add each new
-        # billing period's value to the long-term sum in full.
+        # Lifetime total over every finalised period — the same running sum the
+        # external statistics import uses, so entity and Energy Dashboard agree.
         entities.append(
-            MinolConsumptionSensor(
+            MinolTotalSensor(
                 coordinator=coordinator,
                 entry=entry,
                 service=svc,
@@ -375,6 +373,34 @@ class MinolConsumptionSensor(CoordinatorEntity[MinolDataCoordinator], SensorEnti
             "energy_unit": cons.get("energyUnit"),
         }
         return {k: v for k, v in attrs.items() if v is not None}
+
+
+class MinolTotalSensor(MinolConsumptionSensor):
+    """Running total of every finalised period since move-in.
+
+    "Gesamt" has to mean *gesamt*: the plain per-period value used to sit here,
+    so the total read identical to the latest month.  build_statistics() already
+    produces the cumulative series for the external statistics — its last row is
+    that lifetime sum, and reusing it keeps entity and dashboard in step.
+    """
+
+    @property
+    def native_value(self) -> float | None:
+        stats = build_statistics(
+            self.coordinator.data.get("consumptions", []), self._service.service_code
+        )
+        return round(stats[-1]["sum"], 3) if stats else None
+
+    @property
+    def last_reset(self) -> datetime | None:
+        return None  # cumulative — the counter never restarts
+
+    @property
+    def extra_state_attributes(self) -> dict[str, Any]:
+        stats = build_statistics(
+            self.coordinator.data.get("consumptions", []), self._service.service_code
+        )
+        return {"periods": len(stats)}
 
 
 class MinolTenantInfoSensor(CoordinatorEntity[MinolDataCoordinator], SensorEntity):

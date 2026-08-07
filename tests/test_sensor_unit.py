@@ -90,13 +90,6 @@ _JAN = _period("2026-01-31T00:00:00Z", 300.0, devices=[_device("0000002", 120.0)
 
 
 class TestLastReset:
-    async def test_total_sensor_is_total_with_period_start(self):
-        ents = await _setup({"latest_consumption": _JAN})
-        total = ents["ENTRY1_100_energy_total"]
-        assert total.state_class is SensorStateClass.TOTAL
-        assert total.native_value == 300.0
-        assert total.last_reset == datetime(2026, 1, 1, tzinfo=timezone.utc)
-
     async def test_latest_month_sensor_also_resets_per_period(self):
         ents = await _setup({"latest_consumption": _JAN})
         latest = ents["ENTRY1_100_latest_month"]
@@ -119,7 +112,28 @@ class TestLastReset:
     async def test_unparseable_period_yields_no_reset(self):
         period = dict(_JAN, period="Januar 2026")
         ents = await _setup({"latest_consumption": period})
-        assert ents["ENTRY1_100_energy_total"].last_reset is None
+        assert ents["ENTRY1_100_latest_month"].last_reset is None
+
+
+class TestTotalSensor:
+    """"Gesamt" must sum every period, not repeat the latest month."""
+
+    async def test_sums_all_periods(self):
+        ents = await _setup(
+            {
+                "latest_consumption": _period(*_MONTHS[-1]),
+                "consumptions": [_period(p, v) for p, v in _MONTHS],
+            }
+        )
+        total = ents["ENTRY1_100_energy_total"]
+        assert total.native_value == 830.0  # 300 + 250 + 280
+        assert total.state_class is SensorStateClass.TOTAL
+        assert total.last_reset is None  # cumulative — never resets
+        assert total.extra_state_attributes == {"periods": 3}
+
+    async def test_no_history_yields_none(self):
+        ents = await _setup({"latest_consumption": _JAN})
+        assert ents["ENTRY1_100_energy_total"].native_value is None
 
 
 # ---------------------------------------------------------------------------
@@ -177,7 +191,7 @@ class TestStatisticsAccumulation:
         entities: list = []
         await async_setup_entry(_FakeHass, entry, lambda new: entities.extend(new))
         sensor = next(
-            e for e in entities if e.unique_id == "ENTRY1_100_energy_total"
+            e for e in entities if e.unique_id == "ENTRY1_100_latest_month"
         )
 
         samples = []
@@ -202,7 +216,7 @@ class TestStatisticsAccumulation:
         entry.runtime_data = coordinator
         entities: list = []
         await async_setup_entry(_FakeHass, entry, lambda new: entities.extend(new))
-        sensor = next(e for e in entities if e.unique_id == "ENTRY1_100_energy_total")
+        sensor = next(e for e in entities if e.unique_id == "ENTRY1_100_latest_month")
 
         samples = []
         for value in (200.0, 240.0):

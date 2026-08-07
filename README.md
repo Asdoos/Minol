@@ -16,7 +16,7 @@ Tokens are refreshed silently in the background — you only need to log in once
 
 ## Features
 
-- **Energy Dashboard compatible** — dedicated `*_energy_total` sensors carry `last_reset`, so period totals add up correctly in long-term statistics
+- **Energy Dashboard compatible** — full consumption history imported as long-term statistics, plus `*_energy_total` sensors showing the lifetime sum
 - **Heating, hot water, and cold water** sensors with kWh and volume values
 - **CO₂ tracking** — carbon intensity sensor for heating and hot water
 - **Cost estimation** — configure energy prices to see estimated monthly costs
@@ -35,23 +35,26 @@ For each service type available on your account (heating, hot water, cold water)
 | Sensor | Unit | State class | Description |
 |---|---|---|---|
 | Heating Latest Month | kWh | `total` | Consumption of the latest billing period; resets to a low value when a new period starts |
-| Heating Total | kWh | `total` | Same value as *Heating Latest Month* — use this one as the source in the Energy Dashboard |
+| Heating Total | kWh | `total` | Sum of every finalised period since move-in |
 | Heating CO₂ Latest Month | kg | `measurement` | CO₂ equivalent for heating |
 | Hot Water Latest Month | kWh | `total` | Hot water energy consumption of the latest billing period |
-| Hot Water Total | kWh | `total` | Energy-Dashboard source for hot water |
+| Hot Water Total | kWh | `total` | Sum of every finalised hot water period |
 | Hot Water CO₂ Latest Month | kg | `measurement` | CO₂ equivalent for hot water |
 | Cold Water Latest Month | m³ | `total` | Cold water volume consumption of the latest billing period |
-| Cold Water Total | m³ | `total` | Energy-Dashboard source for cold water |
+| Cold Water Total | m³ | `total` | Sum of every finalised cold water period |
 
 Which sensors appear depends on which services your property has metered.
 Cost sensors are created automatically when a non-zero price is set in Options.
 
-All consumption sensors report the value of a **whole billing period**, so the state drops
-back at every period boundary. They therefore expose `last_reset` (the start of the period)
-alongside `state_class: total`. That is what makes Home Assistant's statistics engine add
-each new period's value to the long-term sum *in full* instead of only its increase over
-the previous period — a 250 kWh month following a 300 kWh one would otherwise contribute
-nothing to the total.
+The *Latest Month* and room sensors report the value of a **whole billing period**, so the
+state drops back at every period boundary. They therefore expose `last_reset` (the start of
+the period) alongside `state_class: total`. That is what makes Home Assistant's statistics
+engine add each new period's value to the long-term sum *in full* instead of only its
+increase over the previous period — a 250 kWh month following a 300 kWh one would otherwise
+contribute nothing to the total.
+
+The *Total* sensors are cumulative instead: they sum every finalised period the API knows,
+so they match the long-term statistics below and have no `last_reset`.
 
 ### Full history in the Energy Dashboard
 
@@ -66,11 +69,18 @@ month, not at the day you installed this integration:
 | `minol_energy:cold_water_volume` | m³ |
 
 Pick these in *Settings → Dashboards → Energy* (they appear in the source picker next to
-regular entities). They are statistics only — no entity, no current state — and are the
-better dashboard source than the `*_energy_total` sensors, which can only record what
-happened while Home Assistant was running. Each month lands on the 1st at 00:00 UTC as a
+regular entities). They are statistics only — no entity, no current state — and are still
+the better dashboard source than the `*_energy_total` sensors, whose own statistics only
+start when Home Assistant first polled. Each month lands on the 1st at 00:00 UTC as a
 single bucket, because monthly totals are all the API reports. Remove them again under
 *Developer tools → Statistics* if you don't want them.
+
+> **Upgrading from 0.8.1:** the `*_energy_total` sensors repeated the latest month's value
+> instead of the lifetime total, so *Heating Total* read the same as *Heating Latest Month*.
+> They now show the running sum. Their state therefore jumps once on upgrade; the
+> statistics recorded for those entities gain that jump as a one-off spike and can be
+> corrected in *Developer tools → Statistics*. The `minol_energy:*` statistics above are
+> unaffected.
 
 > **Upgrading from 0.7.x:** the `*_energy_total` sensors used `total_increasing` there,
 > which silently under-counted whenever a period was larger than the one before it.
