@@ -1,17 +1,16 @@
 """Config flow for Minol Energy integration.
 
-Authentication uses OAuth2 Authorization Code + PKCE against Azure B2C.
-Since the Azure B2C custom policies don't support ROPC (direct password grant),
-and the only registered redirect URIs are the mobile-app native scheme and the
-Postman OAuth2 callback (https://oauth.pstmn.io/v1/callback), the config flow
-guides the user to authenticate in their browser and paste the resulting redirect
-URL back into Home Assistant.
+Authentication uses OAuth2 Authorization Code + PKCE against Azure B2C as a
+public client like the Minol mobile app: B2C's native-client redirect URI
+(``https://minolauth.b2clogin.com/oauth2/nativeclient``), no client secret.  The B2C custom policies don't
+support ROPC (direct password grant), so the user signs in in their browser and
+pastes the result back into Home Assistant.
 
 Flow:
   1. HA generates a PKCE code_verifier/challenge and builds the authorization URL.
   2. User clicks the link, logs in to Minol in their browser.
-  3. After login, the browser navigates to https://oauth.pstmn.io/v1/callback?code=…
-  4. User copies the full URL from the browser address bar and pastes it into HA.
+  3. B2C redirects to …/oauth2/nativeclient?code=… – a blank page.
+  4. User copies the URL from the address bar (or just the code) into HA.
   5. HA extracts the auth code and exchanges it for access + refresh tokens.
   6. Tokens are stored in the config entry; the refresh_token is used for silent
      renewal without requiring the user to log in again.
@@ -24,8 +23,9 @@ import hashlib
 import json
 import logging
 import os
+import re
 from typing import Any
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import unquote, urlencode
 
 import aiohttp
 import voluptuous as vol
@@ -39,7 +39,6 @@ from homeassistant.config_entries import (
 from .const import (
     B2C_AUTH_URL,
     B2C_CLIENT_ID,
-    B2C_CLIENT_SECRET,
     B2C_REDIRECT_URI,
     B2C_SCOPES,
     B2C_TOKEN_URL,
@@ -84,14 +83,25 @@ def _build_auth_url(code_challenge: str, state: str) -> str:
     return B2C_AUTH_URL + "?" + urlencode(params)
 
 
+_CODE_IN_TEXT = re.compile(r"[?&#]code=([^&#\s'\"]+)")
+_BARE_CODE = re.compile(r"[A-Za-z0-9_\-.]{20,}")
+
+
 def _extract_code_from_url(redirect_url: str) -> str | None:
-    """Extract the authorization code from the pasted redirect URL."""
-    try:
-        qs = parse_qs(urlparse(redirect_url.strip()).query)
-        codes = qs.get("code", [])
-        return codes[0] if codes else None
-    except Exception:
+    """Extract the authorization code from whatever the user pasted.
+
+    Accepts the full redirect URL (``…/oauth2/nativeclient?code=…``), any text
+    that contains it, or just the bare code.
+    """
+    text = (redirect_url or "").strip()
+    if not text:
         return None
+    match = _CODE_IN_TEXT.search(text)
+    if match:
+        return unquote(match.group(1))
+    if _BARE_CODE.fullmatch(text):
+        return text
+    return None
 
 
 async def _exchange_code_for_tokens(
@@ -104,7 +114,6 @@ async def _exchange_code_for_tokens(
         "code": code,
         "redirect_uri": B2C_REDIRECT_URI,
         "client_id": B2C_CLIENT_ID,
-        "client_secret": B2C_CLIENT_SECRET,
         "code_verifier": code_verifier,
         "scope": B2C_SCOPES,
     }

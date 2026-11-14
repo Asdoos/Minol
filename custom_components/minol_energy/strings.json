@@ -3,14 +3,14 @@
     "step": {
       "user": {
         "title": "Minol Energy – Sign In",
-        "description": "**Step 1:** Open the link below in your browser and sign in with your Minol account:\n\n[Open Minol login]({auth_url})\n\n**Step 2:** After signing in, your browser will navigate to a Postman page. Copy the **full URL** from the address bar (it starts with `https://oauth.pstmn.io/v1/callback?code=…`) and paste it below.",
+        "description": "**Step 1:** Open the link below in your browser and sign in with your Minol account:\n\n[Open Minol login]({auth_url})\n\n**Step 2:** After signing in, the browser shows a **blank page**. Copy the **full URL** from the address bar (it starts with `https://minolauth.b2clogin.com/oauth2/nativeclient?…code=…`) and paste it below. The code is only valid for a few minutes.",
         "data": {
           "redirect_url": "Redirect URL (paste from browser address bar)"
         }
       },
       "reauth_confirm": {
         "title": "Minol Energy – Re-authenticate",
-        "description": "Your session has expired. Please sign in again.\n\n**Step 1:** Open the link below in your browser:\n\n[Open Minol login]({auth_url})\n\n**Step 2:** After signing in, copy the full URL from the browser address bar (starts with `https://oauth.pstmn.io/v1/callback?code=…`) and paste it below.",
+        "description": "Your session has expired. Please sign in again.\n\n**Step 1:** Open the link below in your browser:\n\n[Open Minol login]({auth_url})\n\n**Step 2:** After signing in, the browser shows a **blank page**. Copy the **full URL** from the address bar (it starts with `https://minolauth.b2clogin.com/oauth2/nativeclient?…code=…`) and paste it below. The code is only valid for a few minutes.",
         "data": {
           "redirect_url": "Redirect URL (paste from browser address bar)"
         }
@@ -19,7 +19,7 @@
     "error": {
       "invalid_auth": "Token exchange failed. Please try again.",
       "cannot_connect": "Cannot connect to the Minol API.",
-      "invalid_redirect_url": "The pasted URL does not contain an authorization code. Make sure you copied the full URL from the browser address bar after signing in.",
+      "invalid_redirect_url": "The pasted URL does not contain an authorization code. Copy the full URL of the blank page (…/oauth2/nativeclient?…code=…) from the address bar after signing in.",
       "unknown": "An unexpected error occurred."
     },
     "abort": {

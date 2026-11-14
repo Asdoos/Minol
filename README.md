@@ -135,8 +135,15 @@ There is no username/password field — you authenticate via your browser once.
 1. **Settings → Devices & Services → Add Integration → Minol Energy**
 2. Click the login link shown in the setup form.
 3. Sign in with your Minol account in the browser.
-4. After signing in, the browser navigates to a Postman callback page. Copy the full URL from the address bar (it starts with `https://oauth.pstmn.io/v1/callback?code=…`).
-5. Paste it into the field in HA and click **Submit**.
+4. After signing in, the browser shows a blank page. Copy the full URL from the
+   address bar (it starts with `https://minolauth.b2clogin.com/oauth2/nativeclient?…code=…`).
+5. Paste it into the field in HA and click **Submit**. The code is only valid for a
+   few minutes.
+
+> Up to v0.8.2 the integration used a Postman callback (`https://oauth.pstmn.io/…`)
+> with a client secret. Minol shut that path down in November 2026 (token endpoint
+> answers `AADB2C90085`). Since v0.9.0 the integration signs in as a public client
+> like the app – B2C's native-client redirect, PKCE, no secret. After updating, re-authenticate once.
 
 Tokens are stored in the config entry and refreshed automatically. You will only need to repeat this if you haven't used HA for more than 14 days.
 
@@ -198,8 +205,8 @@ The test suite makes real API calls. You need a valid token first:
 uv run python scripts/get_token.py
 ```
 
-The script opens the Minol B2C login URL. Sign in, copy the redirect URL from the browser
-address bar, paste it when prompted, and press Enter. The script prints two `export` commands:
+The script prints the Minol B2C login URL. Sign in, copy the URL of the blank page from the
+browser address bar, paste it when prompted, and press Enter. The script prints two `export` commands:
 
 ```bash
 export MINOL_ACCESS_TOKEN="eyJ..."

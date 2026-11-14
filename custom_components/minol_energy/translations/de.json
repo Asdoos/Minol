@@ -3,23 +3,23 @@
     "step": {
       "user": {
         "title": "Minol Energy – Anmeldung",
-        "description": "**Schritt 1:** Öffnen Sie den folgenden Link in Ihrem Browser und melden Sie sich mit Ihrem Minol-Konto an:\n\n[Minol-Anmeldung öffnen]({auth_url})\n\n**Schritt 2:** Nach der Anmeldung leitet der Browser zu einer Postman-Seite weiter. Kopieren Sie die **vollständige URL** aus der Adressleiste (beginnt mit `https://oauth.pstmn.io/v1/callback?code=…`) und fügen Sie sie unten ein.",
+        "description": "**Schritt 1:** \u00d6ffnen Sie den folgenden Link in Ihrem Browser und melden Sie sich mit Ihrem Minol-Konto an:\n\n[Minol-Anmeldung \u00f6ffnen]({auth_url})\n\n**Schritt 2:** Nach der Anmeldung zeigt der Browser eine **leere Seite**. Kopieren Sie die **vollst\u00e4ndige URL** aus der Adressleiste (beginnt mit `https://minolauth.b2clogin.com/oauth2/nativeclient?\u2026code=\u2026`) und f\u00fcgen Sie sie unten ein. Der Code ist nur wenige Minuten g\u00fcltig.",
         "data": {
-          "redirect_url": "Weiterleitungs-URL (aus der Adressleiste des Browsers einfügen)"
+          "redirect_url": "Weiterleitungs-URL (aus der Adressleiste des Browsers einf\u00fcgen)"
         }
       },
       "reauth_confirm": {
         "title": "Minol Energy – Erneut anmelden",
-        "description": "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.\n\n**Schritt 1:** Öffnen Sie den folgenden Link in Ihrem Browser:\n\n[Minol-Anmeldung öffnen]({auth_url})\n\n**Schritt 2:** Nach der Anmeldung kopieren Sie die vollständige URL aus der Adressleiste (beginnt mit `https://oauth.pstmn.io/v1/callback?code=…`) und fügen Sie sie unten ein.",
+        "description": "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.\n\n**Schritt 1:** \u00d6ffnen Sie den folgenden Link in Ihrem Browser:\n\n[Minol-Anmeldung \u00f6ffnen]({auth_url})\n\n**Schritt 2:** Nach der Anmeldung zeigt der Browser eine **leere Seite**. Kopieren Sie die **vollst\u00e4ndige URL** aus der Adressleiste (beginnt mit `https://minolauth.b2clogin.com/oauth2/nativeclient?\u2026code=\u2026`) und f\u00fcgen Sie sie unten ein. Der Code ist nur wenige Minuten g\u00fcltig.",
         "data": {
-          "redirect_url": "Weiterleitungs-URL (aus der Adressleiste des Browsers einfügen)"
+          "redirect_url": "Weiterleitungs-URL (aus der Adressleiste des Browsers einf\u00fcgen)"
         }
       }
     },
     "error": {
       "invalid_auth": "Token-Austausch fehlgeschlagen. Bitte versuchen Sie es erneut.",
       "cannot_connect": "Verbindung zur Minol-API nicht möglich.",
-      "invalid_redirect_url": "Die eingefügte URL enthält keinen Autorisierungscode. Stellen Sie sicher, dass Sie die vollständige URL aus der Adressleiste kopiert haben.",
+      "invalid_redirect_url": "Die eingef\u00fcgte URL enth\u00e4lt keinen Autorisierungscode. Kopieren Sie nach der Anmeldung die vollst\u00e4ndige URL der leeren Seite (\u2026/oauth2/nativeclient?\u2026code=\u2026) aus der Adressleiste.",
       "unknown": "Ein unerwarteter Fehler ist aufgetreten."
     },
     "abort": {

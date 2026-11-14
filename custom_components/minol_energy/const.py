@@ -23,11 +23,13 @@ B2C_TOKEN_URL = (
 # MSAL app registration client ID (iOS app, production tenant)
 B2C_CLIENT_ID = "b751cea9-de3f-498b-9dcf-33a22a28d578"
 
-# Redirect URI registered in the B2C app (Postman OAuth2 callback)
-B2C_REDIRECT_URI = "https://oauth.pstmn.io/v1/callback"
-
-# Client secret required for the authorization code exchange with the Postman redirect URI
-B2C_CLIENT_SECRET = "uKy8Q~r0FdaYeCotNNT0390HW2yoN-rk7srD1cbR"
+# B2C's standard native-client redirect URI.  Using it makes us a *public*
+# client like the mobile app (PKCE only, no client secret).  It is a real https
+# page that stays blank, so the URL with ?code=… is left in the address bar
+# for the user to copy.  (The app's own msal<client_id>://auth works too, but
+# browsers silently drop that redirect.)  The former Postman redirect + client
+# secret path was shut down by Minol in Nov 2026 (token endpoint: AADB2C90085).
+B2C_REDIRECT_URI = "https://minolauth.b2clogin.com/oauth2/nativeclient"
 
 # OAuth2 scopes requested by the mobile app
 B2C_SCOPES = " ".join([
