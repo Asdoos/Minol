@@ -70,8 +70,8 @@ sensor.py          Builds sensor entities from coordinator.data. Creates energy/
 
 config_flow.py     ConfigFlow + OptionsFlow. OAuth2 Authorization Code + PKCE flow:
                    HA builds the auth URL, user logs in via browser, pastes the
-                   resulting redirect URL (msal<client_id>://auth/?code=…, copied
-                   from the browser console) back into HA. HA exchanges the code for tokens and stores them.
+                   resulting redirect URL (…/oauth2/nativeclient?code=…, a blank
+                   page; copied from the address bar) back into HA. HA exchanges the code for tokens and stores them.
                    Options: scan_interval, heating/hot_water/cold_water prices.
 
 const.py           All constants. Key ones: B2C_AUTH_URL, B2C_TOKEN_URL (Azure B2C),
@@ -83,13 +83,13 @@ diagnostics.py     Async diagnostics export; redacts tokens and personal fields
 
 ## Authentication
 
-The app uses **Azure AD B2C OAuth2 Authorization Code + PKCE** via the Minol mobile app's B2C tenant (`minolauth.b2clogin.com`). It acts exactly like the app: **public client**, redirect URI `msal<B2C_CLIENT_ID>://auth` (MSAL native scheme), **no client secret**. Sending a secret is rejected (`AADB2C90084`). The former Postman callback (`https://oauth.pstmn.io/v1/callback`) + client secret path stopped working in Nov 2026 (`AADB2C90085` at the token endpoint, even though `/authorize` still accepts that URI).
+The app uses **Azure AD B2C OAuth2 Authorization Code + PKCE** via the Minol mobile app's B2C tenant (`minolauth.b2clogin.com`). It acts as a **public client** like the app: redirect URI `https://minolauth.b2clogin.com/oauth2/nativeclient` (B2C's native-client page, blank, so the code stays in the address bar), **no client secret**. The app's own `msal<B2C_CLIENT_ID>://auth` is registered too, but browsers silently drop that redirect (no console line, nothing to copy). Sending a secret is rejected (`AADB2C90084`). The former Postman callback (`https://oauth.pstmn.io/v1/callback`) + client secret path stopped working in Nov 2026 (`AADB2C90085` at the token endpoint, even though `/authorize` still accepts that URI).
 
 `config_flow.py` auth flow:
 1. HA generates a PKCE `code_verifier` / `code_challenge` and builds an authorization URL.
 2. User opens the URL in their browser and logs in with their Minol account.
-3. B2C redirects to `msal<client_id>://auth/?code=…`. The browser can't open that scheme; Chrome/Edge log it in the console (`Failed to launch 'msal…'`), Firefox shows it on an error page.
-4. User pastes that URL, the console line or the bare code into HA; `_extract_code_from_url()` handles all three.
+3. B2C redirects to `https://minolauth.b2clogin.com/oauth2/nativeclient?code=…` (blank page).
+4. User pastes that URL (or the bare code) into HA; `_extract_code_from_url()` handles both.
 5. HA POSTs the `code` + PKCE verifier (no secret) to `B2C_TOKEN_URL` to get `access_token` + `refresh_token`.
 6. Tokens stored in config entry; access token (~1 h TTL) is silently refreshed using the refresh token (~14 days).
 

@@ -1,18 +1,16 @@
 """Config flow for Minol Energy integration.
 
-Authentication uses OAuth2 Authorization Code + PKCE against Azure B2C, exactly
-like the Minol mobile app: public client, native MSAL redirect URI
-(``msal<client_id>://auth``), no client secret.  The B2C custom policies don't
+Authentication uses OAuth2 Authorization Code + PKCE against Azure B2C as a
+public client like the Minol mobile app: B2C's native-client redirect URI
+(``https://minolauth.b2clogin.com/oauth2/nativeclient``), no client secret.  The B2C custom policies don't
 support ROPC (direct password grant), so the user signs in in their browser and
 pastes the result back into Home Assistant.
 
 Flow:
   1. HA generates a PKCE code_verifier/challenge and builds the authorization URL.
   2. User clicks the link, logs in to Minol in their browser.
-  3. B2C redirects to msal<client_id>://auth/?code=…  The browser cannot open that
-     scheme; Chrome/Edge log the URL in the developer console ("Failed to launch
-     'msal…'"), Firefox shows it on an error page.
-  4. User copies that URL (or just the code) and pastes it into HA.
+  3. B2C redirects to …/oauth2/nativeclient?code=… – a blank page.
+  4. User copies the URL from the address bar (or just the code) into HA.
   5. HA extracts the auth code and exchanges it for access + refresh tokens.
   6. Tokens are stored in the config entry; the refresh_token is used for silent
      renewal without requiring the user to log in again.
@@ -92,8 +90,8 @@ _BARE_CODE = re.compile(r"[A-Za-z0-9_\-.]{20,}")
 def _extract_code_from_url(redirect_url: str) -> str | None:
     """Extract the authorization code from whatever the user pasted.
 
-    Accepts the full redirect URL (``msal…://auth/?code=…``), a whole browser
-    console line that contains it, or just the bare code.
+    Accepts the full redirect URL (``…/oauth2/nativeclient?code=…``), any text
+    that contains it, or just the bare code.
     """
     text = (redirect_url or "").strip()
     if not text:

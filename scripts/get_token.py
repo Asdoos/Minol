@@ -3,10 +3,9 @@
 
 Flow:
   1. Script opens the auth URL in your default browser automatically.
-  2. Sign in to Minol — B2C redirects to msal<client_id>://auth/?code=…, which the
-     browser cannot open.  Chrome/Edge log that URL in the developer console
-     (F12, "Failed to launch 'msal…'"), Firefox shows it on an error page.
-  3. Paste that URL (or the console line, or just the code) and press Enter.
+  2. Sign in to Minol — the browser ends on a blank page
+     https://minolauth.b2clogin.com/oauth2/nativeclient?code=…
+  3. Copy that URL from the address bar, paste it and press Enter.
   4. Tokens are exchanged and printed as export commands.
 
 Usage:
@@ -126,11 +125,9 @@ def main() -> None:
     print()
     print(auth_url)
     print()
-    print("After signing in, the browser tries to open msal...://auth/?code=... and")
-    print("fails. Chrome/Edge: open the developer console (F12) and copy the line")
-    print("  \"Failed to launch 'msal...://auth/?code=...'\".")
-    print("Firefox: copy the URL from the error page / address bar.")
-    print("Paste it below (the whole line is fine) and press Enter.")
+    print("After signing in, the browser shows a blank page. Copy the full URL from")
+    print("the address bar (https://minolauth.b2clogin.com/oauth2/nativeclient?code=...)")
+    print("and paste it below, then press Enter.")
     print()
     redirect_url = _read_long_line("Paste redirect URL: ")
 

@@ -19,7 +19,6 @@ from custom_components.minol_energy.config_flow import (
     _get_email_from_token,
 )
 from custom_components.minol_energy.const import (
-    B2C_CLIENT_ID,
     B2C_REDIRECT_URI,
     SERVICE_COLD_WATER,
     SERVICE_HEATING,
@@ -356,19 +355,16 @@ class TestRefreshAccessToken:
 
 
 class TestExtractCodeFromUrl:
-    def test_extracts_code_from_native_redirect(self):
-        url = f"{B2C_REDIRECT_URI}/?code=ABC123&state=xyz"
+    def test_extracts_code_from_redirect(self):
+        url = f"{B2C_REDIRECT_URI}?code=ABC123&state=xyz"
         assert _extract_code_from_url(url) == "ABC123"
 
-    def test_extracts_code_from_chrome_console_line(self):
-        line = (
-            f"Failed to launch '{B2C_REDIRECT_URI}/?code=eyJ.abc-_9&state=xyz'"
-            " because the scheme does not have a registered handler."
-        )
+    def test_extracts_code_from_surrounding_text(self):
+        line = f"Failed to launch '{B2C_REDIRECT_URI}?code=eyJ.abc-_9&state=xyz'"
         assert _extract_code_from_url(line) == "eyJ.abc-_9"
 
     def test_extracts_code_when_last_param(self):
-        url = f"{B2C_REDIRECT_URI}/?state=xyz&code=LAST"
+        url = f"{B2C_REDIRECT_URI}?state=xyz&code=LAST"
         assert _extract_code_from_url(url) == "LAST"
 
     def test_accepts_bare_code(self):
@@ -376,7 +372,7 @@ class TestExtractCodeFromUrl:
         assert _extract_code_from_url(f"  {code}\n") == code
 
     def test_returns_none_when_no_code(self):
-        url = f"{B2C_REDIRECT_URI}/?state=xyz"
+        url = f"{B2C_REDIRECT_URI}?state=xyz"
         assert _extract_code_from_url(url) is None
 
     def test_returns_none_for_short_garbage(self):
@@ -386,13 +382,13 @@ class TestExtractCodeFromUrl:
         assert _extract_code_from_url("") is None
 
     def test_handles_whitespace(self):
-        url = f"  {B2C_REDIRECT_URI}/?code=XYZ  "
+        url = f"  {B2C_REDIRECT_URI}?code=XYZ  "
         assert _extract_code_from_url(url) == "XYZ"
 
 
 class TestNativeRedirect:
-    def test_redirect_is_msal_native_scheme(self):
-        assert B2C_REDIRECT_URI == f"msal{B2C_CLIENT_ID}://auth"
+    def test_redirect_is_b2c_native_client_page(self):
+        assert B2C_REDIRECT_URI == "https://minolauth.b2clogin.com/oauth2/nativeclient"
 
 
 class TestPkce:
