@@ -19,6 +19,8 @@ from custom_components.minol_energy.config_flow import (
     _get_email_from_token,
 )
 from custom_components.minol_energy.const import (
+    B2C_CLIENT_ID,
+    B2C_REDIRECT_URI,
     SERVICE_COLD_WATER,
     SERVICE_HEATING,
     SERVICE_HOT_WATER,
@@ -294,6 +296,11 @@ class TestRefreshAccessToken:
         assert client._refresh_token == "new_refresh"
         assert refreshed == [("new_access", "new_refresh", 3600)]
 
+        # Public client like the mobile app: no secret, native redirect URI.
+        payload = session.post.call_args.kwargs["data"]
+        assert "client_secret" not in payload
+        assert payload["redirect_uri"] == B2C_REDIRECT_URI
+
     async def test_failed_refresh_returns_false(self):
         client = MinolApiClient(access_token="old", refresh_token="refresh_tok")
 
@@ -349,20 +356,43 @@ class TestRefreshAccessToken:
 
 
 class TestExtractCodeFromUrl:
-    def test_extracts_code(self):
-        url = "https://oauth.pstmn.io/v1/callback?code=ABC123&state=xyz"
+    def test_extracts_code_from_native_redirect(self):
+        url = f"{B2C_REDIRECT_URI}/?code=ABC123&state=xyz"
         assert _extract_code_from_url(url) == "ABC123"
 
+    def test_extracts_code_from_chrome_console_line(self):
+        line = (
+            f"Failed to launch '{B2C_REDIRECT_URI}/?code=eyJ.abc-_9&state=xyz'"
+            " because the scheme does not have a registered handler."
+        )
+        assert _extract_code_from_url(line) == "eyJ.abc-_9"
+
+    def test_extracts_code_when_last_param(self):
+        url = f"{B2C_REDIRECT_URI}/?state=xyz&code=LAST"
+        assert _extract_code_from_url(url) == "LAST"
+
+    def test_accepts_bare_code(self):
+        code = "eyJraWQiOiJBenczbmluSlFHWEdTSndL.abc_DEF-123"
+        assert _extract_code_from_url(f"  {code}\n") == code
+
     def test_returns_none_when_no_code(self):
-        url = "https://oauth.pstmn.io/v1/callback?state=xyz"
+        url = f"{B2C_REDIRECT_URI}/?state=xyz"
         assert _extract_code_from_url(url) is None
+
+    def test_returns_none_for_short_garbage(self):
+        assert _extract_code_from_url("hello") is None
 
     def test_handles_empty_string(self):
         assert _extract_code_from_url("") is None
 
     def test_handles_whitespace(self):
-        url = "  https://oauth.pstmn.io/v1/callback?code=XYZ  "
+        url = f"  {B2C_REDIRECT_URI}/?code=XYZ  "
         assert _extract_code_from_url(url) == "XYZ"
+
+
+class TestNativeRedirect:
+    def test_redirect_is_msal_native_scheme(self):
+        assert B2C_REDIRECT_URI == f"msal{B2C_CLIENT_ID}://auth"
 
 
 class TestPkce:

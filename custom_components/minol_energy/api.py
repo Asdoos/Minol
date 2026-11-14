@@ -42,7 +42,6 @@ from .const import (
     API_CLIENT_SECRET,
     APP_VERSION,
     B2C_CLIENT_ID,
-    B2C_CLIENT_SECRET,
     B2C_REDIRECT_URI,
     B2C_SCOPES,
     B2C_TOKEN_URL,
@@ -150,7 +149,6 @@ class MinolApiClient:
             "grant_type": "refresh_token",
             "refresh_token": self._refresh_token,
             "client_id": B2C_CLIENT_ID,
-            "client_secret": B2C_CLIENT_SECRET,
             "redirect_uri": B2C_REDIRECT_URI,
             "scope": B2C_SCOPES,
         }

@@ -3,10 +3,11 @@
 
 Flow:
   1. Script opens the auth URL in your default browser automatically.
-  2. Sign in to Minol — browser navigates to https://oauth.pstmn.io/v1/callback?code=…
-  3. Copy the full URL from your browser address bar.
-  4. Press Enter in the terminal — the script reads the URL from your clipboard.
-  5. Tokens are exchanged and printed as export commands.
+  2. Sign in to Minol — B2C redirects to msal<client_id>://auth/?code=…, which the
+     browser cannot open.  Chrome/Edge log that URL in the developer console
+     (F12, "Failed to launch 'msal…'"), Firefox shows it on an error page.
+  3. Paste that URL (or the console line, or just the code) and press Enter.
+  4. Tokens are exchanged and printed as export commands.
 
 Usage:
     uv run python scripts/get_token.py
@@ -27,14 +28,14 @@ import os
 import sys
 import termios
 import tty
-from urllib.parse import parse_qs, urlencode, urlparse
+from urllib.parse import urlencode
 
 import aiohttp
 
+from custom_components.minol_energy.config_flow import _extract_code_from_url
 from custom_components.minol_energy.const import (
     B2C_AUTH_URL,
     B2C_CLIENT_ID,
-    B2C_CLIENT_SECRET,
     B2C_REDIRECT_URI,
     B2C_SCOPES,
     B2C_TOKEN_URL,
@@ -95,7 +96,6 @@ async def _exchange_code(code: str, code_verifier: str) -> dict:
         "code": code,
         "redirect_uri": B2C_REDIRECT_URI,
         "client_id": B2C_CLIENT_ID,
-        "client_secret": B2C_CLIENT_SECRET,
         "code_verifier": code_verifier,
         "scope": B2C_SCOPES,
     }
@@ -126,14 +126,15 @@ def main() -> None:
     print()
     print(auth_url)
     print()
-    print("After signing in, your browser will navigate to a Postman page.")
-    print("Copy the full URL from the address bar (starts with")
-    print("  https://oauth.pstmn.io/v1/callback?code=...) and paste it below, then press Enter.")
+    print("After signing in, the browser tries to open msal...://auth/?code=... and")
+    print("fails. Chrome/Edge: open the developer console (F12) and copy the line")
+    print("  \"Failed to launch 'msal...://auth/?code=...'\".")
+    print("Firefox: copy the URL from the error page / address bar.")
+    print("Paste it below (the whole line is fine) and press Enter.")
     print()
     redirect_url = _read_long_line("Paste redirect URL: ")
 
-    qs = parse_qs(urlparse(redirect_url).query)
-    code = (qs.get("code") or [None])[0]
+    code = _extract_code_from_url(redirect_url)
     if not code:
         print("\n[ERROR] No authorization code found in the URL.")
         sys.exit(1)

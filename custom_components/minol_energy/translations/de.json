@@ -3,23 +3,23 @@
     "step": {
       "user": {
         "title": "Minol Energy – Anmeldung",
-        "description": "**Schritt 1:** Öffnen Sie den folgenden Link in Ihrem Browser und melden Sie sich mit Ihrem Minol-Konto an:\n\n[Minol-Anmeldung öffnen]({auth_url})\n\n**Schritt 2:** Nach der Anmeldung leitet der Browser zu einer Postman-Seite weiter. Kopieren Sie die **vollständige URL** aus der Adressleiste (beginnt mit `https://oauth.pstmn.io/v1/callback?code=…`) und fügen Sie sie unten ein.",
+        "description": "**Schritt 1:** \u00d6ffnen Sie den folgenden Link in Ihrem Browser und melden Sie sich mit Ihrem Minol-Konto an:\n\n[Minol-Anmeldung \u00f6ffnen]({auth_url})\n\n**Schritt 2:** Nach der Anmeldung versucht der Browser, eine Adresse `msalb751cea9-\u2026://auth/?code=\u2026` zu \u00f6ffnen, und scheitert \u2013 das ist normal. Kopieren Sie diese Adresse:\n- **Chrome / Edge:** F12 dr\u00fccken, Reiter *Konsole* \u00f6ffnen und die Zeile `Failed to launch 'msal\u2026://auth/?code=\u2026'` kopieren.\n- **Firefox:** Adresse von der Fehlerseite bzw. aus der Adressleiste kopieren.\n\n**Schritt 3:** Unten einf\u00fcgen \u2013 die ganze Konsolenzeile, die Adresse oder nur der Code. Der Code ist nur wenige Minuten g\u00fcltig.",
         "data": {
-          "redirect_url": "Weiterleitungs-URL (aus der Adressleiste des Browsers einfügen)"
+          "redirect_url": "Weiterleitungs-URL oder Code (aus Browser-Konsole / Adressleiste)"
         }
       },
       "reauth_confirm": {
         "title": "Minol Energy – Erneut anmelden",
-        "description": "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.\n\n**Schritt 1:** Öffnen Sie den folgenden Link in Ihrem Browser:\n\n[Minol-Anmeldung öffnen]({auth_url})\n\n**Schritt 2:** Nach der Anmeldung kopieren Sie die vollständige URL aus der Adressleiste (beginnt mit `https://oauth.pstmn.io/v1/callback?code=…`) und fügen Sie sie unten ein.",
+        "description": "Ihre Sitzung ist abgelaufen. Bitte melden Sie sich erneut an.\n\n**Schritt 1:** \u00d6ffnen Sie den folgenden Link in Ihrem Browser:\n\n[Minol-Anmeldung \u00f6ffnen]({auth_url})\n\n**Schritt 2:** Nach der Anmeldung versucht der Browser, eine Adresse `msalb751cea9-\u2026://auth/?code=\u2026` zu \u00f6ffnen, und scheitert \u2013 das ist normal. Kopieren Sie diese Adresse:\n- **Chrome / Edge:** F12 dr\u00fccken, Reiter *Konsole* \u00f6ffnen und die Zeile `Failed to launch 'msal\u2026://auth/?code=\u2026'` kopieren.\n- **Firefox:** Adresse von der Fehlerseite bzw. aus der Adressleiste kopieren.\n\n**Schritt 3:** Unten einf\u00fcgen \u2013 die ganze Konsolenzeile, die Adresse oder nur der Code. Der Code ist nur wenige Minuten g\u00fcltig.",
         "data": {
-          "redirect_url": "Weiterleitungs-URL (aus der Adressleiste des Browsers einfügen)"
+          "redirect_url": "Weiterleitungs-URL oder Code (aus Browser-Konsole / Adressleiste)"
         }
       }
     },
     "error": {
       "invalid_auth": "Token-Austausch fehlgeschlagen. Bitte versuchen Sie es erneut.",
       "cannot_connect": "Verbindung zur Minol-API nicht möglich.",
-      "invalid_redirect_url": "Die eingefügte URL enthält keinen Autorisierungscode. Stellen Sie sicher, dass Sie die vollständige URL aus der Adressleiste kopiert haben.",
+      "invalid_redirect_url": "Im eingef\u00fcgten Text wurde kein Autorisierungscode gefunden. Kopieren Sie die Zeile mit `msal\u2026://auth/?code=\u2026` aus der Browser-Konsole (bzw. die Adressleiste in Firefox).",
       "unknown": "Ein unerwarteter Fehler ist aufgetreten."
     },
     "abort": {

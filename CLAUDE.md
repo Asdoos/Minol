@@ -70,12 +70,12 @@ sensor.py          Builds sensor entities from coordinator.data. Creates energy/
 
 config_flow.py     ConfigFlow + OptionsFlow. OAuth2 Authorization Code + PKCE flow:
                    HA builds the auth URL, user logs in via browser, pastes the
-                   resulting redirect URL (https://oauth.pstmn.io/v1/callback?code=…)
-                   back into HA. HA exchanges the code for tokens and stores them.
+                   resulting redirect URL (msal<client_id>://auth/?code=…, copied
+                   from the browser console) back into HA. HA exchanges the code for tokens and stores them.
                    Options: scan_interval, heating/hot_water/cold_water prices.
 
 const.py           All constants. Key ones: B2C_AUTH_URL, B2C_TOKEN_URL (Azure B2C),
-                   API_BASE_URL (Mulesoft), API_CLIENT_ID/SECRET, B2C_CLIENT_ID/SECRET.
+                   API_BASE_URL (Mulesoft), API_CLIENT_ID/SECRET, B2C_CLIENT_ID, B2C_REDIRECT_URI.
 
 diagnostics.py     Async diagnostics export; redacts tokens and personal fields
                    (userID, email, name, address) before returning.
@@ -83,14 +83,14 @@ diagnostics.py     Async diagnostics export; redacts tokens and personal fields
 
 ## Authentication
 
-The app uses **Azure AD B2C OAuth2 Authorization Code + PKCE** via the Minol mobile app's B2C tenant (`minolauth.b2clogin.com`). The redirect URI is `https://oauth.pstmn.io/v1/callback` (the Postman OAuth2 callback, registered in the B2C app alongside the native app scheme).
+The app uses **Azure AD B2C OAuth2 Authorization Code + PKCE** via the Minol mobile app's B2C tenant (`minolauth.b2clogin.com`). It acts exactly like the app: **public client**, redirect URI `msal<B2C_CLIENT_ID>://auth` (MSAL native scheme), **no client secret**. Sending a secret is rejected (`AADB2C90084`). The former Postman callback (`https://oauth.pstmn.io/v1/callback`) + client secret path stopped working in Nov 2026 (`AADB2C90085` at the token endpoint, even though `/authorize` still accepts that URI).
 
 `config_flow.py` auth flow:
 1. HA generates a PKCE `code_verifier` / `code_challenge` and builds an authorization URL.
 2. User opens the URL in their browser and logs in with their Minol account.
-3. B2C redirects to `https://oauth.pstmn.io/v1/callback?code=…`
-4. User copies that full URL and pastes it into HA.
-5. HA extracts the `code` and POSTs to `B2C_TOKEN_URL` to exchange it for `access_token` + `refresh_token`.
+3. B2C redirects to `msal<client_id>://auth/?code=…`. The browser can't open that scheme; Chrome/Edge log it in the console (`Failed to launch 'msal…'`), Firefox shows it on an error page.
+4. User pastes that URL, the console line or the bare code into HA; `_extract_code_from_url()` handles all three.
+5. HA POSTs the `code` + PKCE verifier (no secret) to `B2C_TOKEN_URL` to get `access_token` + `refresh_token`.
 6. Tokens stored in config entry; access token (~1 h TTL) is silently refreshed using the refresh token (~14 days).
 
 ## API data shape
